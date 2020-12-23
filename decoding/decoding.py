@@ -140,21 +140,21 @@ def plot_log_mse(mse):#, mps_time, mps_freqs):
         fig - figure handle '''
     fig, ax = plt.subplots()
     fig.suptitle('Mean squared error over all MPSs')
-    im = ax.imshow(np.log(mse))
+    im = ax.imshow(mse)
     # transform mps_time and mps_freqs from list of strings to np 1d array to allow indexing
-    #mps_time = np.array([float(el) for el in mps_time])
-    #mps_freqs = np.array([float(el) for el in mps_freqs])
+    mps_time = np.array([float(el) for el in mps_time])
+    mps_freqs = np.array([float(el) for el in mps_freqs])
     # x labels
-    #x_inds = np.around(np.linspace(0, len(mps_time), 10, endpoint=False)).astype(int)
-    #ax.set_xticks(x_inds)
-    #ax.set_xticklabels(mps_time[x_inds])
+    x_inds = np.around(np.linspace(0, len(mps_time), 10, endpoint=False)).astype(int)
+    ax.set_xticks(x_inds)
+    ax.set_xticklabels(mps_time[x_inds])
     # y labels
-    #y_inds = np.around(np.linspace(0, len(mps_freqs), 10, endpoint=False)).astype(int)
-    #ax.set_yticks(y_inds)
-    #ax.set_yticklabels(mps_freqs[y_inds])
+    y_inds = np.around(np.linspace(0, len(mps_freqs), 10, endpoint=False)).astype(int)
+    ax.set_yticks(y_inds)
+    ax.set_yticklabels(mps_freqs[y_inds])
     # colorbar
     cbar = fig.colorbar(im, ax=ax)
-    cbar.set_label('log MSE')
+    cbar.set_label('MSE')
     return fig
 
 def reshape_mps(mps, mps_shape):
@@ -448,24 +448,3 @@ if __name__ == '__main__':
     decoding_model(args.input_data_dir, args.output_dir, stim_param_dir, subjects, runs, scorers, alphas,\
         do_pca_fmri, var_explained)
 
-# draft of possible alternative
-#    parser.add_argument('-scor','--scorers', type=str, nargs='+',default=\
-#    ['product_moment_corr','mean_squared_error'], help='List of scorers to use.')
-#    parser.add_argument('-a','--alphas', type=float, nargs='+', default=[3,10], help='comma-sparated floats,'
-#    'endpoint and number of points to generate with np.logspace function to test as regularization'
-#    'terms in ridge regression')
-#    parser.add_argument('-pca','--do_pca',type=bool, default=False, help='Boolean, whether to do pca on'
-#    ' fmri data before training ridge regression. Note, that if ture, var_explained parameter shall be specified')
-#    parser.add_argument('-var','--var_explained',type=float, default=None, help='var_explained parameter'
-#    ' for reducing the number of principal components of fmri data before training ridge_regression.')  
-#    parser.add_argument('-stim_par','--stim_param_dir',type=str, help='Path to the directory with stimulus'
-#    'parameter files, output folder of run_feature_extraction.sh bash script')
-#    parser.add_argument('-sub','--subjects',type=str, nargs='+', default=['01','02','03','04','05','06','09',\
-#    '10','14','15','16','17','18','19','20'], help='Comma-separated numbers of subject to run decoding on.'
-#    'Note, that for subjects 1 to 9 zero shall precede subject number (e.g. 01, 02, etc.).')
-#    parser.add_argument('-runs','--runs_list', type=str, nargs='+', default=\
-#    [[1,2,3,4,5,6,7,8], [1,2,3,4,5,6,7,8],[1,2,3,4,5,6,7,8], [1,2,3,4,5,6,7,8],\
-#    [1,2,3,4,5,6,7,8], [1,2,3,4,5,6,7,8], [1,2,3,4,5,6,7,8],[1,2,3,4,5,6,7,8],\
-#    [1,2,3,4,5,6,7,8], [1,2,3,4,5,6,7,8], [1,2,3,4,5,6,7,8], [1,2,3,4,5,6,7,8],\
-#    [1,2,3,4,5,6,7,8], [1,2,3,4,5,6,7,8], [1,2,3,4,5,6,7,8]],help='List of lists of runs on which to run decoding.'
-#    'Each list contains runs for every subject')   
