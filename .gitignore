@@ -1,0 +1,2 @@
+# Exclude binary files
+*.pyc
