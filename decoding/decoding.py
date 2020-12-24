@@ -46,9 +46,10 @@ def get_ridges_and_staff(X, y, scorers, alphas=[1000],  n_splits=8, voxel_select
     ridges = [] 
     scores_dict = {}
     test_inds=[]
-    pred_data = []
-    split_counter = 0
-    # TODO: likely memory inefficient, should be changed
+    pred_data = [] 
+    from collections import defaultdict 
+    scores_dict = defaultdict(list) 
+    
     if voxel_selection:
         voxel_var = np.var(y, axis=0)
         y = y[:, voxel_var > 0.]
@@ -57,24 +58,29 @@ def get_ridges_and_staff(X, y, scorers, alphas=[1000],  n_splits=8, voxel_select
         # loop through scorers
         for ind in range(len(scorers)):
             if scorers[ind] != 'product_moment_corr':
-                scorer=eval('sklearn.metrics.'+scorers[ind]) 
+                scorer=eval('sklearn.metrics.'+scorers[ind])
+        #TODO allow to feed in the function object!!!
             else:
                 scorer = eval(scorers[ind])
+        
             if voxel_selection:
                 score = np.zeros_like(voxel_var)
-                score[voxel_var > 0.] =  scorer(y[test], ridges[-1].predict(X[test]))
-            else:
-                score = scorer(y[test], ridges[-1].predict(X[test]))
+                # just temporary: feed multoutput only to sklearn scorers, not to procut_moment_corr 
+                if scorers[ind] != 'product_moment_corr':
+                    score[voxel_var > 0.] =  scorer(y[test], ridges[-1].predict(X[test]), multioutput='raw_values')
+                else:
+                    score[voxel_var > 0.] =  scorer(y[test], ridges[-1].predict(X[test]))
+            else: 
+                if scorers[ind] != 'product_moment_corr':
+                    score = scorer(y[test], ridges[-1].predict(X[test]),multioutput='raw_values')
+                else:
+                    score = scorer(y[test], ridges[-1].predict(X[test]))
             # initialize and update dictionary keys 
-            if split_counter == 0:
-                scores_dict.update({str(scorers[ind]): []})
             scores_dict[str(scorers[ind])].append(score[:,None])
         # get predicted data
         pred_data.append(ridges[-1].predict(X[test]))
         # keep track of test indices
         test_inds.append(test)
-        # update split counter
-        split_counter += 1
     # concatenate pred_data and scores_dict
     scores_dict = {k:np.concatenate(v, axis=1).T for (k,v) in scores_dict.items()} 
     pred_data = np.concatenate(pred_data, axis=0)
@@ -130,7 +136,7 @@ def compute_correlation(real_mps, reconstructed_mps, **kwargs):
         correlations.append(np.corrcoef(real_mps[time,:], reconstructed_mps[time,:])[0,-1])
     return np.reshape(np.array(correlations), (-1,1))
 
-def plot_log_mse(mse):#, mps_time, mps_freqs):
+def plot_mse(mse, mps_time, mps_freqs):
     ''' Function plots mse as imshow and returns figure handle
     Inputs:
         mse - 2d numpy array of reshaped mse
@@ -140,7 +146,7 @@ def plot_log_mse(mse):#, mps_time, mps_freqs):
         fig - figure handle '''
     fig, ax = plt.subplots()
     fig.suptitle('Mean squared error over all MPSs')
-    im = ax.imshow(mse)
+    im = ax.imshow(mse, origin='lower', aspect='auto')
     # transform mps_time and mps_freqs from list of strings to np 1d array to allow indexing
     mps_time = np.array([float(el) for el in mps_time])
     mps_freqs = np.array([float(el) for el in mps_freqs])
@@ -148,10 +154,12 @@ def plot_log_mse(mse):#, mps_time, mps_freqs):
     x_inds = np.around(np.linspace(0, len(mps_time), 10, endpoint=False)).astype(int)
     ax.set_xticks(x_inds)
     ax.set_xticklabels(mps_time[x_inds])
+    ax.set_xlabel('modulation/s')
     # y labels
     y_inds = np.around(np.linspace(0, len(mps_freqs), 10, endpoint=False)).astype(int)
     ax.set_yticks(y_inds)
     ax.set_yticklabels(mps_freqs[y_inds])
+    ax.set_ylabel('modulation/Hz')
     # colorbar
     cbar = fig.colorbar(im, ax=ax)
     cbar.set_label('MSE')
@@ -184,7 +192,7 @@ def plot_mps_and_reconstructed_mps(original_mps, reconstructed_mps, mps_time, mp
         kwargs            - arguments for imshow function
     Outputs:
         fig - figure handle'''
-    fig, (ax1, ax2) = plt.subplots(1,2) 
+    fig, (ax1, ax2) = plt.subplots(1,2, figsize=(16,9)) 
     im1 = ax1.imshow(original_mps, origin='lower', aspect='auto')
     im2 = ax2.imshow(reconstructed_mps, origin='lower', aspect='auto') 
     # transform mps_time and mps_freqs from list of strings to np 1d array to allow indexing
@@ -197,14 +205,18 @@ def plot_mps_and_reconstructed_mps(original_mps, reconstructed_mps, mps_time, mp
     x_inds = np.around(np.linspace(0, len(mps_time), 10, endpoint=False)).astype(int)
     ax1.set_xticks(x_inds)
     ax1.set_xticklabels(mps_time[x_inds])
+    ax1.set_xlabel('modulation/s')
     ax2.set_xticks(x_inds)
     ax2.set_xticklabels(mps_time[x_inds])
+    ax2.set_xlabel('modulation/s')
     # y labels
     y_inds = np.around(np.linspace(0, len(mps_freqs), 10, endpoint=False)).astype(int)
     ax1.set_yticks(y_inds)
     ax1.set_yticklabels(mps_freqs[y_inds])
+    ax1.set_ylabel('modulation/s')
     ax2.set_yticks(y_inds)
     ax2.set_yticklabels(mps_freqs[y_inds])
+    ax2.set_ylabel('modulation/Hz')
     # colorbar
     cbar1 = fig.colorbar(im1, ax=ax1)
     cbar1.set_label('log MPS')
@@ -259,8 +271,7 @@ def decode_single_run(fmri_path, stimulus_path, alphas, scorers, stim_param_path
     mse = np.mean(scores_dict['mean_squared_error'], axis=0)
     resh_mse = lambda x: np.reshape(x, (parameters['mps_shape']))
     mse = resh_mse(mse)
-    fig_mse = plot_log_mse(mse)#, parameters['mps_time'], parameters['mps_freqs'])
-    plt.show()
+    fig_mse = plot_mse(mse, parameters['mps_time'], parameters['mps_freqs']) 
     
     # compute correlation between reconstructed mps and original mps and plot it
     correlations = compute_correlation(y, pred_data)
@@ -270,7 +281,6 @@ def decode_single_run(fmri_path, stimulus_path, alphas, scorers, stim_param_path
     ax.plot(correlations)
     ax.set_xlabel('MPS times')
     ax.set_ylabel('Correlations per MPS time point')
-    plt.show()
     
     # reshape original and reconstructed MPS
     orig_mps = reshape_mps(y, parameters['mps_shape'])
@@ -378,9 +388,9 @@ def decoding_model(inp_data_dir, out_dir, stim_param_dir, subjects, runs, scorer
             print('saving model data for subject ', str(subjects[subj_counter]), ' run ', str(run_num))
             # name files files
             ridge_name = 'ridges_run-'+str(run_num) + '.pkl'
-            scores_dict_name = 'scores_dict_run-' + str(run_num) + '.txt'
-            pred_data_name = 'reconstructed_mps_run-' + str(run_num) + '.txt'
-            correlations_name = 'correlations_run-'+str(run_num) + '.txt'
+            scores_dict_name = 'scores_dict_run-' + str(run_num) + '.pkl'
+            pred_data_name = 'reconstructed_mps_run-' + str(run_num) + '.pkl'
+            correlations_name = 'correlations_run-'+str(run_num) + '.pkl'
 
             ridges_filename = os.path.join(out_dir, subj_folder, ridge_name) 
             scores_dict_filename =  os.path.join(out_dir, subj_folder, scores_dict_name) 
@@ -411,10 +421,9 @@ if __name__ == '__main__':
     data shall be saved. Folder structure can be pre-created or absent')
     parser.add_argument('-config','--config_file', type=str, help='Path to json config file \
     containing subject list, run list, alphas, do_pca_frmi, var_explained and key-value arguments for \
-    decoding_model function.') 
+    decoding_model function. IT SI RECOMMENDED TO STORE CONFIG FILE IN THE OUTPUT DIR.') 
     args = parser.parse_args()
-   
-    import ipdb;ipdb.set_trace()
+    
     with open(args.config_file) as conf:
         config = json.load(conf)   
     # set the defaults in arguments are not specified in config
@@ -444,7 +453,7 @@ if __name__ == '__main__':
     alpha_dense = config['alphas'][1]
     alphas = np.logspace(0, alpha_end, alpha_dense).tolist()
     
-    # RUN DECODING MODEL WITH GIVEN ARGUMENTS   
+    # RUN DECODING MODEL WITH THE GIVEN ARGUMENTS   
     decoding_model(args.input_data_dir, args.output_dir, stim_param_dir, subjects, runs, scorers, alphas,\
         do_pca_fmri, var_explained)
 
