@@ -8,7 +8,7 @@ import glob
 import json
 import nibabel as nib
 import sys
-sys.path.append('/data/akitaitsev/data1/code/voxelwiseencoding/')
+sys.path.append('/data/akitaitsev/data1/code/decoding/')
 from preprocessing import preprocess_bold_fmri, make_X_Y
 from nilearn.masking import compute_epi_mask
 
