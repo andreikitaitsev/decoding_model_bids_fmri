@@ -87,9 +87,9 @@ def get_ridges_and_staff(X, y, scorers, alphas=[1000],  n_splits=8, voxel_select
     return ridges, scores_dict, pred_data, test_inds 
 
 def reduce_dimensionality(X, var_explained, examine_variance=False, **kwargs):
-    ''' Function applys pca with user specified variance explained to stimulus representation or bold data
+    ''' Function applys pca with user specified variance explained to the input data
     Inputs:
-        X - 2d numpy array (samples, features) /(samples/voxels)
+        X - 2d numpy array (samples/voxels)
         var_explained - float, variabce explained
         examine_variance - logical, whether to run function in interactive mode to manually determine number 
         of components to leave by variance explained plot. Default =Fasle
@@ -110,11 +110,12 @@ def reduce_dimensionality(X, var_explained, examine_variance=False, **kwargs):
         fig, ax = plt.subplots()
         ax = fig.add_subplot(111)
         ax.plot(vars_exp*100, '--ob')
-        fig.suptitle('Variance explained')
+        fig.suptitle('Scree plot of variance explained')
         ax.set_xlabel('Component number')
-        ax.set_ytitle('Variance explained, %')
-        
-        comp2leave=input('Enter number of components to leave: ')
+        ax.set_ylabel('Variance explained, %')
+        plt.show(block = False)
+
+        comp2leave=int(input('Enter number of components to leave: '))
         pca = PCA(n_components=comp2leave)
         pca.fit(X)
     else:
