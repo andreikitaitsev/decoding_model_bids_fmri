@@ -246,6 +246,8 @@ def decode_single_run(fmri_path, stimulus_path, alphas, scorers, stim_param_path
             scores          - dictionary with coefficients of deviation of predicted data from real data (depend on scorer)
             pred_data       - data, reconstructed from ridges
             correlations    - correlations of reconstructed MPS with the original ones (one value per timepoint)
+            figs            - list of figure handles of mse plot, correlation grpaph and MPS with best, worst and medium 
+                              correlation values  
     '''
     # Load data
     with open(fmri_path, 'rb') as fm:
@@ -312,18 +314,20 @@ def decoding_model(inp_data_dir, out_dir, stim_param_dir, subjects, runs, scorer
            
            inp_data_dir  - str - full path to the directory containing preprocessed subject and fmri data
            out_dir       - str, full path to the directory where you want to save results of decoding model.
-                           Function takes care of folder structure and creates folders for each subject if they do not exist
+                           Function takes care of folder structure and creates folders for each subject if 
+                           they do not exist
            
-           stim_param_dir- str, path to the directory containing stimuli parameters json files for every specified run
-           subjects      - list of strings - subject numbers to run decoding on (note that subjects from 0 to 9 shall 
+           stim_param_dir- str, path to the directory containing stimuli parameters json files for every 
+                           specified run
+           subjects      - list of strings - subject numbers to run decoding on (note that subjects from 0 
+                           to 9 shall 
                            have 0 before their number ('01', '09', etc.)!
            runs          - list of lists of integers - numbers of runs to run decoding on (one list per subject)
            alphas        - lisf of floats - regularization parameters for ridge_gridsearch_per_target function
            do_pca_fmri   - boolean, whether to do pca on fmri data. Default = False. 
                            Note, that if do_pca_fmri=True, var_explained argument shall be specified.
            var_explained - number of components to leave by variance explained by them.
-           kwargs        - key-value arguments 
-    Outputs:
+           kwargs        - key-value arguments  
     '''
     #### Input check
     # as model takes long time to run (would a be pity to find a glitch after running model for days:) )
@@ -414,15 +418,22 @@ def decoding_model(inp_data_dir, out_dir, stim_param_dir, subjects, runs, scorer
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='Decoding model app. Reconstructs modulation power spectrum '\
-    'from aligned preprocessed stimulus and fmri data. User specifies input dir, output dir and config file path. '\
-    'Config file shall be .json file containing valid arguments for decoding_model_function.')
+    parser = argparse.ArgumentParser(description='Decoding model app. Reconstructs modulation power spectrum \n'
+    'from aligned preprocessed stimulus and fmri data. User specifies input dir, output dir and config file path. \n'
+    'Config file shall be .json file containing valid arguments for decoding_model_function. \n' 
+    'Note that the default values are default for decoding parameters if not specified in config file: \n'
+    'subjects 01, 02, 03, 04, 05, 06, 09, 10, 14, 15, 16, 17, 18, 19, 20 \n'  
+    'runs 1, 2, 3, 4, 5, 6, 7, 8 \n' 
+    'scorers product_moment_corr, mean_squared_error \n' 
+    'do_pca False \n'
+    'var_explained None',formatter_class=argparse.RawTextHelpFormatter ) 
+    
     parser.add_argument('-inp','--input_data_dir', type=str, help='Path to preprocessed stimuli and fmri')
     parser.add_argument('-out','--output_dir', type=str, help='Path to the output directory where the model \
     data shall be saved. Folder structure can be pre-created or absent')
     parser.add_argument('-config','--config_file', type=str, help='Path to json config file \
     containing subject list, run list, alphas, do_pca_frmi, var_explained and key-value arguments for \
-    decoding_model function. IT SI RECOMMENDED TO STORE CONFIG FILE IN THE OUTPUT DIR.') 
+    decoding_model function. IT IS RECOMMENDED TO STORE CONFIG FILE IN THE OUTPUT DIR.') 
     args = parser.parse_args()
     
     with open(args.config_file) as conf:
