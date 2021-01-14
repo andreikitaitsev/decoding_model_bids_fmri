@@ -57,23 +57,22 @@ def get_ridges_and_staff(X, y, scorers, alphas=[1000],  n_splits=8, voxel_select
         ridges.append(ridge_gridsearch_per_target(X[train], y[train], alphas, **kwargs))
         # loop through scorers
         for ind in range(len(scorers)):
-            if scorers[ind] != 'product_moment_corr':
-                scorer=eval('sklearn.metrics.'+scorers[ind])
-        #TODO allow to feed in the function object!!!
-            else:
+            # allow to feed in the function object
+            try: 
+                scorer = eval('sklearn.metrics.'+scorers[ind])
+            except:
                 scorer = eval(scorers[ind])
-        
             if voxel_selection:
                 score = np.zeros_like(voxel_var)
-                # just temporary: feed multoutput only to sklearn scorers, not to procut_moment_corr 
-                if scorers[ind] != 'product_moment_corr':
+                try:
+                    scorer=eval('sklearn.metrics.'+scorers[ind])
                     score[voxel_var > 0.] =  scorer(y[test], ridges[-1].predict(X[test]), multioutput='raw_values')
-                else:
+                except:
                     score[voxel_var > 0.] =  scorer(y[test], ridges[-1].predict(X[test]))
             else: 
-                if scorers[ind] != 'product_moment_corr':
+                try:
                     score = scorer(y[test], ridges[-1].predict(X[test]),multioutput='raw_values')
-                else:
+                except:
                     score = scorer(y[test], ridges[-1].predict(X[test]))
             # initialize and update dictionary keys 
             scores_dict[str(scorers[ind])].append(score[:,None])
@@ -137,17 +136,18 @@ def compute_correlation(real_mps, reconstructed_mps, **kwargs):
         correlations.append(np.corrcoef(real_mps[time,:], reconstructed_mps[time,:])[0,-1])
     return np.reshape(np.array(correlations), (-1,1))
 
-def plot_mse(mse, mps_time, mps_freqs):
-    ''' Function plots mse as imshow and returns figure handle
+def plot_score_single_mps(score, score_name, mps_time, mps_freqs):
+    ''' Function plots any sklearn score as imshow and returns figure handle
     Inputs:
-        mse - 2d numpy array of reshaped mse
+        score - 2d numpy array of reshaped score
+        score_name - str, name of the score used
         mps_time - list of strings of mps_time from stimulus parameters json file (output of wav_files....py)
         mps_freqs - list of strings of mps_freqs from stimulus parameters json file (output of wav_files....py)
     Outputs:
         fig - figure handle '''
     fig, ax = plt.subplots()
-    fig.suptitle('Mean squared error over all MPSs')
-    im = ax.imshow(mse, origin='lower', aspect='auto')
+    fig.suptitle(score_name + ' over all MPSs')
+    im = ax.imshow(score, origin='lower', aspect='auto')
     # transform mps_time and mps_freqs from list of strings to np 1d array to allow indexing
     mps_time = np.array([float(el) for el in mps_time])
     mps_freqs = np.array([float(el) for el in mps_freqs])
@@ -163,7 +163,7 @@ def plot_mse(mse, mps_time, mps_freqs):
     ax.set_ylabel('modulation/Hz')
     # colorbar
     cbar = fig.colorbar(im, ax=ax)
-    cbar.set_label('MSE')
+    cbar.set_label(score_name)
     return fig
 
 def reshape_mps(mps, mps_shape):
@@ -270,21 +270,21 @@ def decode_single_run(fmri_path, stimulus_path, alphas, scorers, stim_param_path
     # ridges
     ridges, scores_dict, pred_data, test_inds = get_ridges_and_staff(X, y, scorers, alphas, **kwargs)  
     
-    # get mean squared error for every feature and plot it
-    mse = np.mean(scores_dict['mean_squared_error'], axis=0)
-    resh_mse = lambda x: np.reshape(x, (parameters['mps_shape']))
-    mse = resh_mse(mse)
-    fig_mse = plot_mse(mse, parameters['mps_time'], parameters['mps_freqs']) 
-    
-    # compute correlation between reconstructed mps and original mps and plot it
+    # get correlation coefficient for every feature across different MPSs and plot it
+    r2 = product_moment_corr(y, pred_data)
+    resh_r2 = lambda x: np.reshape(x, (parameters['mps_shape']))
+    r2 = resh_r2(r2)
+    fig_r2 = plot_score_single_mps(r2, 'Correlation coefficient', parameters['mps_time'], parameters['mps_freqs']) 
+     
+    # compute correlation between reconstructed MPSs  and original MPSs and plot it
     correlations = compute_correlation(y, pred_data)
     
     fig_cor, ax = plt.subplots(1)
     fig_cor.suptitle('Correlation of original MPS with reconstructed MPS') 
     ax.plot(correlations)
     ax.set_xlabel('MPS times')
-    ax.set_ylabel('Correlations per MPS time point')
-    
+    ax.set_ylabel('Correlations per MPS')
+    ax.set_ylim([0,1])
     # reshape original and reconstructed MPS
     orig_mps = reshape_mps(y, parameters['mps_shape'])
     reconstr_mps = reshape_mps(pred_data, parameters['mps_shape'])
@@ -292,19 +292,29 @@ def decode_single_run(fmri_path, stimulus_path, alphas, scorers, stim_param_path
     # plot original and reconstructed MPS with best, worst and "medium" correlation values 
     best_mps_ind = np.argmax(np.squeeze(np.abs(correlations)))
     best_mps = np.squeeze(reconstr_mps[:,:,best_mps_ind])
-    fig_mps_best = plot_mps_and_reconstructed_mps(orig_mps[:,:,best_mps_ind], best_mps,\
-        parameters['mps_time'], parameters['mps_freqs'], 'Best MPS')
+    
+    # TMP! delete mean over mod/s)
+    best_mps[0,100] = best_mps[0,100] - best_mps[0,100] 
+    orig_mps[0,100,best_mps_ind] = orig_mps[0,100,best_mps_ind]-  orig_mps[0,100,best_mps_ind]
+    fig_mps_best = plot_mps_and_reconstructed_mps(orig_mps[:,:,best_mps_ind], best_mps, parameters['mps_time'], parameters['mps_freqs'], 'Best MPS')
 
     worst_mps_ind = np.argmin(np.squeeze(np.abs(correlations)))
     worst_mps = np.squeeze(reconstr_mps[:,:,worst_mps_ind]) 
+     
+    orig_mps[0,100,worst_mps_ind] = orig_mps[0,100,worst_mps_ind]-  orig_mps[0,100,worst_mps_ind]
+    
+    worst_mps[:,100] = worst_mps[:,100] - worst_mps[:,100] 
     fig_mps_worst = plot_mps_and_reconstructed_mps(orig_mps[:,:,worst_mps_ind], worst_mps,\
         parameters['mps_time'],  parameters['mps_freqs'], 'Worst MPS')
 
     medium_mps_ind = np.argmin(np.squeeze(np.abs(correlations-np.mean(correlations))))
     medium_mps = np.squeeze(reconstr_mps[:,:,medium_mps_ind])
+    
+    orig_mps[0,100,medium_mps_ind] =orig_mps[0,100,medium_mps_ind]-  orig_mps[0,100,medium_mps_ind]  
+    medium_mps[:,100] = medium_mps[:,100] - medium_mps[:,100] 
     fig_mps_medium = plot_mps_and_reconstructed_mps(orig_mps[:,:,medium_mps_ind], medium_mps,\
         parameters['mps_time'], parameters['mps_freqs'], 'Medium MPS')
-    figs = [fig_cor, fig_mse, fig_mps_best, fig_mps_worst,fig_mps_medium]  
+    figs = [fig_cor, fig_r2, fig_mps_best, fig_mps_worst, fig_mps_medium]  
     return ridges, scores_dict, pred_data, correlations, figs 
 
 
@@ -409,7 +419,7 @@ def decoding_model(inp_data_dir, out_dir, stim_param_dir, subjects, runs, scorer
             
             # save figures
             # figures = [fig_cor, fig_mse, fig_mps_best, fig_mps_worst, fig_mps_medium] 
-            figure_names = ['correlation_run-' + str(run_num)+'.png', 'MSE_run-' + str(run_num)+'.png', 'best_mps_run-' + str(run_num)+'.png',\
+            figure_names = ['correlation_run-' + str(run_num)+'.png', 'R2_run-' + str(run_num)+'.png', 'best_mps_run-' + str(run_num)+'.png',\
                 'worst_mps_run-' + str(run_num)+'.png', 'medium_mps_run-' + str(run_num)+'.png']
             figure_filenames = [os.path.join(out_dir, subj_folder, name) for name in figure_names]
             for fig_num, fig in enumerate(figures):
@@ -421,10 +431,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Decoding model app. Reconstructs modulation power spectrum \n'
     'from aligned preprocessed stimulus and fmri data. User specifies input dir, output dir and config file path. \n'
     'Config file shall be .json file containing valid arguments for decoding_model_function. \n' 
-    'Note that the default values are default for decoding parameters if not specified in config file: \n'
+    'Note that the default values for decoding parameters if not specified in config file: \n'
     'subjects 01, 02, 03, 04, 05, 06, 09, 10, 14, 15, 16, 17, 18, 19, 20 \n'  
     'runs 1, 2, 3, 4, 5, 6, 7, 8 \n' 
-    'scorers product_moment_corr, mean_squared_error \n' 
+    'scorers product_moment_corr \n' 
     'do_pca False \n'
     'var_explained None',formatter_class=argparse.RawTextHelpFormatter ) 
     
@@ -439,9 +449,10 @@ if __name__ == '__main__':
     with open(args.config_file) as conf:
         config = json.load(conf)   
     # set the defaults in arguments are not specified in config
+    
     if 'subjects' in config: 
         subjects = config['subjects'] 
-    else:
+    else:   
         subjects =['01','02','03','04','05','06','09','10','14','15','16','17','18','19','20']
     
     if 'runs' in config:
@@ -452,7 +463,7 @@ if __name__ == '__main__':
     if 'scorers' in config:
         scorers = config['scorers']
     else:
-        scorers = ['product_moment_corr','mean_squared_error']
+        scorers = ['product_moment_corr']
     
     if 'do_pca_fmri' in config:
         do_pca_fmri = config['do_pca_fmri']
