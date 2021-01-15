@@ -1,1 +1,1 @@
-{"sr":20000,"n_fft_stft":400,"hop_length_stft":200,"n_fft_mps":200,"hop_length_mps":200,"plot_spectr":true,"use_power":true,"log":true,"dB":false,"plot_mps":true,"dec":3,"return_figures":true}
+{"sr":20000,"n_fft_stft":400,"hop_length_stft":200,"n_fft_mps":200,"hop_length_mps":200,"plot_spectr":true,"use_power":true,"log":true,"dB":false,"plot_mps":true,"dec":3,"return_figures":true, "cutoff_temp_mod":25, "cutoff_spectr_mod":25}
