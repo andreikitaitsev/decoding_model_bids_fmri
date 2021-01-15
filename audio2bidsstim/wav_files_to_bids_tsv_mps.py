@@ -10,9 +10,28 @@ import json
 import os
 import warnings            
 import pandas as pd 
-__all__ = ['mps_stft','get_mel_spectrogram']
+__all__ = ['standardize_mps', 'mps_stft','get_mel_spectrogram']
 
-
+def standardize_mps(mps, return_mean_and_sd=False):
+    '''Function standardizes flattened MPS of shape (times, features) by dividing each feature into its 
+    standard deviation across times and subtracting the mean across times. Function can also return 
+    the original mean and SD as outputs
+    Inputs:
+        mps                - 2d numpy array of shape (times, features)
+        return_mean_and_sd - logical, whether to return the mean and SD of original MPS as outputs
+                             Default = False
+    Output:
+        std_mps - 2d numpy array of shape (times, features) - standardized MPS
+        mean    - 1d numpy arrays - the mean of the original MPS
+        sd      - 1d numpy array - SD of the original MPS
+    ''' 
+    mean = np.mean(mps, axis=0)
+    sd = np.std(mps, axis = 0)
+    std_mps = np.divide((mps-mean), np.std(mps, axis = 0))
+    if return_mean_and_sd:
+        return std_mps, mean, sd
+    else:
+        return std_mps
 
 def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mps, use_power = True, log=True,\
              dB=False, plot_spectr=False, plot_mps=False, return_figures=False, cutoff_temp_mod = 50, cutoff_spectr_mod = 50, dec = 2, **kwargs):
@@ -36,16 +55,20 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
     return_figures -       flag, whether to return figure handlers (if there are any) 
     cutoff_temp_mod -   cutoff of modulationd/s (Hz). (default = 50)
     cutoff_spectr_mod - cutoff of modulation/Hz. (default = 50)
-    kwargs -            key-value arguements to librosa stft function when creating spectrogram or numpy fft2 fucntion when creating MPS
+    kwargs -            key-value arguements to librosa stft function when creating spectrogram or \
+                        numpy fft2 fucntion when creating MPS
     Note1: log and dB cannot be True at the same time!
     
     Outputs:
         
     mod_pow_spectrs - modulation power spectra - feature representation (time x features) - numpy 2d array
-    params - python dictionary of fucntion parameters(in the subdict metadata), feature_names and repetition time in seconds
-    metadata - dictionary, data required according to the bids standard (repetition time and feature names)
+    params          - python dictionary of fucntion parameters(in the subdict metadata), \
+                      feature_names and repetition time in seconds
+    metadata        - dictionary, data required according to the bids standard \
+                      (repetition time and feature names)
     
-    Note, that feature_names - list of strings - all modulatation/s for each modulation/Hz (all mod/s for  mod/Hz==1, all mod/s for md/Hz==2, etc.) 
+    Note, that feature_names - list of strings - all modulatation/s for each modulation/Hz 
+    (all mod/s for  mod/Hz==1, all mod/s for md/Hz==2, etc.) 
     repetition time in seconds - float; amount of seconds between 2 mps (2 rows in feature_representation)
     
     '''
@@ -130,6 +153,9 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
         mod_pow_spectrs.append(mps_iter)
     mod_pow_spectrs = np.concatenate(mod_pow_spectrs, axis=0)
     
+    # standardize flattened MPSs across times (subtract mean and sd across times)
+    mod_pow_spectrs, mps_mean, mps_sd = standardize_mps(mod_pow_spectrs, return_mean_and_sd = True)
+
     # check if dec is smaller than step_size_mps_freq 
     if np.round(np.abs(mps_freqs[1] - mps_freqs[0]), decimals = dec) == 0:
         warn_message_freq="The amount of decimals to round feature names you have chosen"+ \
@@ -207,7 +233,8 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
     parameters = {'sr':sr,'hop_length_stft': hop_length_stft,'n_fft_stft': n_fft_stft, 'n_fft_mps': n_fft_mps, \
                 'hop_length_mps':hop_length_mps, 'dB': dB, 'log':log, 'use_power': use_power, \
                 'cutoff_temp_mod': cutoff_temp_mod, 'cutoff_spectr_mod': cutoff_spectr_mod, 'mps_shape':mps_accum[0].shape,\
-                    'mps_repetition_time': mps_repetition_time, 'mps_freqs':mps_freqs, 'mps_time':mps_time}
+                    'mps_repetition_time': mps_repetition_time, 'mps_freqs':mps_freqs, 'mps_time':mps_time,\
+                    'mps_mean': mps_mean.tolist(), 'mps_sd': mps_sd.tolist()}
     metadata = {'mps_repetition_time': mps_repetition_time, "feature_names": feature_names}  
     if return_figures:
         return mod_pow_spectrs, parameters, metadata, fig1, fig2
