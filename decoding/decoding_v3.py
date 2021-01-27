@@ -181,17 +181,21 @@ def plot_mps_and_reconstructed_mps(original_mps, reconstructed_mps, mps_time, mp
 
 # Custom decoder classes
 class Ridge:
-    def __init__(self, alphas =[1000], voxel_selection=True, n_splits_gridsearch = 5, **kwargs):
+    def __init__(self, alphas = None, voxel_selection=True, var_explained=None, n_splits_gridsearch = 5, **kwargs):
         '''
         kwargs - additional arguments transferred to ridge_gridsearch_per_target
-        alphas - list of floats, optional
+        alphas - list of 3 int (start, stop, num parameters in numpy logspace function),
+                 optional. Default = 1000
                  Regularization parameters to be used for Ridge regression
         voxel_selection - bool, optional, default True
                           Whether to only use voxels with variance larger than zero.
+        var_explained - float, whether to do pca on frmi with defiend variance explained. 
+        Default = None (no pca)
         n_splits_gridsearch - int, number of cross-validation splits in ridge_gridsearch_per_target. '''
         self.alphas = alphas
         self.voxel_selection = voxel_selection
         self.n_splits_gridsearch = n_splits_gridsearch
+        self.var_explained = var_explained
         self.ridge_model = None
         self.predicted_stim = None
     
@@ -203,6 +207,12 @@ class Ridge:
         if self.voxel_selection:
             voxel_var = np.var(fmri, axis=0)
             fmri = fmri[:,voxel_var > 0.]
+        if self.alphas is None:
+            self.alphas = [1000]
+        else:
+            self.alphas = np.logspace(self.alphas[0], self.alphas[1], self.alphas[2])
+        if self.var_explained != None:
+            fmri = reduce_dimensionality(fmri, self.var_explained)
         self.ridge_model = ridge_gridsearch_per_target(fmri, stim, self.alphas, n_splits = self.n_splits_gridsearch)
     
     def predict(self, fmri):
@@ -210,13 +220,13 @@ class Ridge:
         self.predicted_stim = self.ridge_model.predict(fmri)
         return self.predicted_stim
 
-
+# draft needs modification!!!
 class myCCA(CCA):
-    def __init__(self, n_components, **kwargs):
-        super().__init__()
-        self.n_components = n_components
-        self.cca_model = CCA(n_components = n_components, **kwargs)
+    def __init__(self, n_components):
+        super().__init__(self, n_components)
+        self.cca_model = CCA(n_components)
         self.predicted_data=None 
+         
     def fit(self, fmri, stim):
         self.cca_model.fit(fmri, stim)
     
@@ -227,12 +237,13 @@ class myCCA(CCA):
 
 # Decoding functions
 
-def decode_single_run(fmri, stim, decoder, n_splits=8):
+def decode_single_run(fmri, stim, decoder, decoder_config, n_splits=8):
     '''Runs decoding one stimulus and fmri runi
     Inputs:
         fmri - 2d numpy array of preprocessed fmri
         stim - 2d numpy array of  preprocessed stim
         decoder - decoder object with .fit and .predict methods
+        decoder_config - dictionary with the config for decoder
         n_splits - int, number of cross-validation splits;
         Default = 8.
     Outputs:
@@ -248,9 +259,9 @@ def decode_single_run(fmri, stim, decoder, n_splits=8):
     kfold = KFold(n_splits=n_splits)
     for train, test in kfold.split(fmri, stim):
         # copy decoder object
-        decoders.append(copy.deepcopy(decoder))
+        dec = copy.deepcopy(decoder(**decoder_config))
+        decoders.append(dec)
         # fit a copy of decoder object on train split
-        import ipdb; ipdb.set_trace()
         decoders[-1].fit(fmri[train,:], stim[train,:])
         # predict stimulus from trained object
         predictions.append(decoders[-1].predict(fmri[test,:]))
@@ -282,11 +293,15 @@ def assess_predictions(orig_stim, predicted_stim, parameters):
     correlations = compute_correlation(orig_stim, predicted_stim) 
     fig_cor = plot_score_across_mps(correlations, 'Correlation', [0,1])
     
+    # denormalize original and reconstructed MPS
+    denorm_orig_stim = denormalize(orig_stim, parameters)
+    denorm_predicted_stim = denormalize(predicted_stim, parameters)
+    
     # reshape original and reconstructed MPS
-    orig_mps = reshape_mps(orig_stim, parameters['mps_shape'])
-    reconstr_mps = reshape_mps(predicted_stim, parameters['mps_shape'])
+    orig_mps = reshape_mps(denorm_orig_stim, parameters['mps_shape'])
+    reconstr_mps = reshape_mps(denorm_predicted_stim, parameters['mps_shape'])
 
-    # plot original and reconstructed MPS with best, worst and "medium" correlation values 
+    # plot denormalized original and reconstructed MPS with best, worst and "medium" correlation values 
     best_mps_ind = np.argmax(np.squeeze(np.abs(correlations)))
     best_mps = np.squeeze(reconstr_mps[:,:,best_mps_ind]) 
     fig_mps_best = plot_mps_and_reconstructed_mps(orig_mps[:,:,best_mps_ind], best_mps,\
@@ -309,19 +324,37 @@ def assess_predictions(orig_stim, predicted_stim, parameters):
     mps_inds = {'best_mps':int(best_mps_ind), 'worst_mps':int(worst_mps_ind), 'medium_mps':int(medium_mps_ind)}
     return {"correlations": correlations, "r2": r2, "figs": figs, "mps_inds": mps_inds}
 
+def denormalize(stim, parameters):
+    ''' Function adds mean and SD to the flattened stimulus representation by reading 
+    it from stim_param file (output of feature extractor)
+    Inputs:
+        stim - 2d numpy array of flattened stimulus representation (time, MPSs)
+        parameters - python dictionary (output of the feature extractor)
+    Output:
+        rescaled_stim - signal mutliplied by SD and incremented with mean of 
+                          original signal
+    '''
+    mean = np.array(parameters["mps_mean"])
+    sd = np.array(parameters["mps_sd"])
+    if stim.shape[1] != mean.shape[0] or stim.shape[1] != sd.shape[0]:
+        raise ValueError("The sizes of mean and sd arrays do not match the size\
+            of the stimulus")
+    stim = stim*sd + mean
+    return stim
 
-def decoding_model(inp_data_dir, out_dir, stim_param_dir, decoding_config, config):
+
+def decoding_model(inp_data_dir, out_dir, stim_param_dir, decoder_config, model_config):
 
     ### Input check (as model takes long time to run (would a be pity to find a glitch after running model for days:) )
     
     # unpack subjects and runs
-    if "subjects"in config:
-        subjects = config["subjects"]
+    if "subjects"in model_config:
+        subjects = model_config["subjects"]
     else:
         subjects =['01','02','03','04','05','06','09','14','15','16','17','18','19','20']
     
-    if "runs" in config:
-        runs = config["runs"]
+    if "runs" in model_config:
+        runs = model_config["runs"]
     else:
         runs = [[1,2,3,4,5,6,7,8] for el in range(len(subjects))]
     
@@ -393,16 +426,15 @@ def decoding_model(inp_data_dir, out_dir, stim_param_dir, decoding_config, confi
             
             # create decoder object
             try:
-                decoder = eval(decoding_config["decoder"])
+                decoder = eval(model_config["decoder"])
             except:
-                print("Cannot create decoder" + str(decoding_config["decoder"])+'.')
+                print("Cannot create decoder " + str(model_config["decoder"])+'.')
                 break
 
             # run decode_single_run       
             print('running decode_single_run on subject', str(subjects[subj_counter]),' run ',\
                 str(run_num))
-            predictions, cv_indices, decoders = decode_single_run(fmri, stim, decoder, \
-                **{arg: decoding_config["arg"] for arg in ["n_splits"] if arg in decoding_config}) 
+            predictions, cv_indices, decoders = decode_single_run(fmri, stim, decoder, decoder_config) 
             
             # run assess_predictions
             assessments = assess_predictions(stim, predictions, parameters)
@@ -410,14 +442,17 @@ def decoding_model(inp_data_dir, out_dir, stim_param_dir, decoding_config, confi
             # save model data into subject-specific folder in the out_dir
             print('saving model data for subject ', str(subjects[subj_counter]), \
                 'run ', str(run_num) + '...')
-            decoder_name = config["decoder"] + '_run-' + str(run_num) + '.pkl'
+            decoder_name = model_config["decoder"] + '_run-' + str(run_num) + '.pkl'
             predictions_name = 'reconstructed_mps_run-' + str(run_num) + '.pkl'
             cv_indices_name = 'cv_indices_run-' + str(run_num) + '.pkl'
-            
+            #joblib.dump(decoders, os.path.join(out_dir, subj_folder, decoder_name),compress=9)
+            joblib.dump(predictions, os.path.join(out_dir, subj_folder, predictions_name))
+            joblib.dump(cv_indices, os.path.join(out_dir, subj_folder, cv_indices_name)) 
+
             # save assessment data
             for assessment in assessments.keys():
                 filename = assessment + '_run-' + str(run_num) + '.pkl'
-                json.dump(assessments[assessment], os.path.join(out_dir, subj_folder, filename))
+                joblib.dump(assessments[assessment], os.path.join(out_dir, subj_folder, filename))
 
             # save figures (fig_cor, fig_mse, fig_mps_best, fig_mps_worst, fig_mps_medium) 
             for fig in assessments["figs"].keys():
@@ -429,28 +464,23 @@ if __name__ == '__main__':
     
     import argparse
     parser = argparse.ArgumentParser(description='Decoding model app. Reconstructs modulation power spectrum from aligned \n'
-    'preprocessed stimulus and fmri data. User specifies input dir, output dir, decoding_config \n'
+    'preprocessed stimulus and fmri data. User specifies input dir, output dir, decoder_config \n'
     'and model_config file paths. \n'
-    'decoding_config shall contain decoder name and valid arguments for its parameters. \n'
-    'Config files shall be .json file containing valid arguments for decoding_model function. \n' 
-    'Note the default values for config parameters (if not specified in config file): \n'
+    'decoder_config shall contain valid arguments for user-specifeid type of decoder. \n'
+    'Model_config files shall be .json file containing valid arguments for decoding_model function and decoder type. \n' 
+    'Note the default values for model_config parameters (if not specified in model_config file): \n'
     'subjects 01, 02, 03, 04, 05, 06, 09, 10, 14, 15, 16, 17, 18, 19, 20 \n'  
     'runs 1, 2, 3, 4, 5, 6, 7, 8 \n', formatter_class=argparse.RawTextHelpFormatter ) 
     
     parser.add_argument('-inp','--input_dir', type=str, help='Path to preprocessed stimuli and fmri')
     parser.add_argument('-out','--output_dir', type=str, help='Path to the output directory where the model \
     data shall be saved. Folder structure can be pre-created or absent')
-    parser.add_argument('-dec_conf', '--decoding_config', type=str, help='Path to the json file with decoding config')
+    parser.add_argument('-dec_conf', '--decoder_config', type=str, help='Path to the json file with decoder config')
     parser.add_argument('-mod_conf','--model_config', type=str, help=\
-    'Path to json model config file containing stim_param_dir, subject list, list of lists of run list, \n'
-    'decoder and decoder-specific parameters. \n'
-    'For decoder = ridges: \n'
-    'alphas, do_pca_fmri, var_explained,scorers \n'
-    'For decoder = cca: \n'
-    'n_components \n'    
-    'IT IS RECOMMENDED TO STORE CONFIG FILE IN THE OUTPUT DIR.') 
+    'Path to json model config file containing stim_param_dir, subject list, list of lists of runs and decoder. \n' 
+    'IT IS RECOMMENDED TO STORE BOTH CONFIG FILES IN THE OUTPUT DIR.') 
     args = parser.parse_args()
-    with open (args.decoding_config) as dconf:
+    with open (args.decoder_config) as dconf:
         dec_config = json.load(dconf)
     with open(args.model_config) as mconf:
         mod_config = json.load(mconf)   
