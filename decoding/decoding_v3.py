@@ -25,7 +25,8 @@ def reduce_dimensionality(X, var_explained, examine_variance=False, **kwargs):
         of components to leave by variance explained plot. Default =Fasle
         kwargs - kwargs for sklearn pca obejct 
     Outputs:
-        X_backproj - reduced rand data 
+        X_backproj - reduced rand data
+        pca - pca object trained (fitted) on the supplied data
         comp2leave - number of components left
     '''   
     
@@ -53,7 +54,7 @@ def reduce_dimensionality(X, var_explained, examine_variance=False, **kwargs):
     pca=PCA(n_components=comp2leave)
     pca.fit(X)
     X_backproj = pca.transform(X)
-    return X_backproj, comp2leave
+    return X_backproj, pca, comp2leave
 
 def compute_correlation(real_mps, reconstructed_mps, **kwargs):
     ''' Fucntion computes correlation between real (extracted MPS and MPS reconstruced indecoding model for every time sample.
@@ -180,7 +181,7 @@ def plot_mps_and_reconstructed_mps(original_mps, reconstructed_mps, mps_time, mp
 
 
 # Custom decoder classes
-class Ridge:
+class myRidge:
     def __init__(self, alphas = None, voxel_selection=True, var_explained=None, n_splits_gridsearch = 5, **kwargs):
         '''
         kwargs - additional arguments transferred to ridge_gridsearch_per_target
@@ -196,6 +197,7 @@ class Ridge:
         self.voxel_selection = voxel_selection
         self.n_splits_gridsearch = n_splits_gridsearch
         self.var_explained = var_explained
+        self.pca = None
         self.ridge_model = None
         self.predicted_stim = None
     
@@ -212,26 +214,24 @@ class Ridge:
         else:
             self.alphas = np.logspace(self.alphas[0], self.alphas[1], self.alphas[2])
         if self.var_explained != None:
-            fmri = reduce_dimensionality(fmri, self.var_explained)
+            # return pca object and keep it
+            fmri, pca, _ = reduce_dimensionality(fmri, self.var_explained)
+            self.pca = pca
         self.ridge_model = ridge_gridsearch_per_target(fmri, stim, self.alphas, n_splits = self.n_splits_gridsearch)
     
     def predict(self, fmri):
         ''' Returns the stimulus predicted from model trained on test set'''
-        self.predicted_stim = self.ridge_model.predict(fmri)
+        self.predicted_stim = self.ridge_model.predict(self.pca.transform(fmri))
         return self.predicted_stim
 
-# draft needs modification!!!
+
 class myCCA(CCA):
-    def __init__(self, n_components):
-        super().__init__(self, n_components)
-        self.cca_model = CCA(n_components)
+    def __init__(self, n_components=10, **kwargs):
+        super().__init__(n_components = n_components, **kwargs)
         self.predicted_data=None 
          
-    def fit(self, fmri, stim):
-        self.cca_model.fit(fmri, stim)
-    
     def predict(self, fmri):
-        self.predicted_data = self.cca_model.predict(fmri)
+        self.predicted_data = CCA.predict(self, fmri)
         return self.predicted_data
 
 
