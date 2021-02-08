@@ -320,11 +320,14 @@ def invoke_decoders(decoders, decoders_configs):
     '''
     invoked_decoders = []
     for dec_num in range(len(decoders)):
+        decoder = decoders[dec_num]
         try:
-            decoder = eval(decoders[dec_num])
+            decoder = eval(decoder)
         except:
             if not isinstance(decoder, str):
                 pass
+            if isinstance(decoder, str):
+                raise ValueError("There is no such decoder as "+str(decoder)+"!")
         decoder = decoder(**decoders_configs[dec_num])
         invoked_decoders.append(decoder)
     return invoked_decoders
@@ -338,10 +341,8 @@ def lag(X, lag_par):
         X_lagged - 2d numpy array
     '''
     X_lagged = []
-    x_iter = X.copy()
-    for i in range(1, lag_par+1):
-        x_iter[-i,:] = np.zeros(X.shape[1])
-        X_lagged.append(x_iter.copy())
+    for i in range(0, lag_par+1):
+        X_lagged.append( np.vstack((X[i:,:], np.zeros((i, X.shape[1]))))) 
     return np.concatenate(X_lagged, axis=1)
 
 ### Custom decoder classes
@@ -408,7 +409,7 @@ class temporal_decoder:
     def fit(self, x, y):
         self.decoder.fit(lag(x, self.lag_par), y)
     def predict(self, x):
-        return self.decoder.predict(x)
+        return self.decoder.predict(lag(x,lag_par))
 
 
 
