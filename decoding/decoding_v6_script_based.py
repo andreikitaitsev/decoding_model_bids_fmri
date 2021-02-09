@@ -416,7 +416,7 @@ class temporal_decoder:
     def fit(self, x, y):
         self.decoder.fit(lag(x, self.lag_par), y)
     def predict(self, x):
-        return self.decoder.predict(lag(x,lag_par))
+        return self.decoder.predict(lag(x,self.lag_par))
 
 
 
