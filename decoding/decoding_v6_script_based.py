@@ -348,7 +348,7 @@ def lag(X, lag_par):
 ### Custom decoder classes
 
 class myRidge():
-    def __init__(self, alphas = None, voxel_selection=True, var_explained=None, n_splits_gridsearch = 5, **kwargs):
+    def __init__(self, alphas = None, voxel_selection=True, var_explained=None, n_splits = 8, n_splits_gridsearch = 5, **kwargs):
         '''
         kwargs - additional arguments transferred to ridge_gridsearch_per_target
         alphas - list of 3 int (start, stop, num parameters in numpy logspace function),
@@ -357,11 +357,13 @@ class myRidge():
         voxel_selection - bool, optional, default True
                           Whether to only use voxels with variance larger than zero.
         var_explained - float, whether to do pca on frmi with defiend variance explained. 
-        Default = None (no pca)
+                        Default = None (no pca)
+        n_splits - int, number of splits in cross validation in fit_transform method
         n_splits_gridsearch - int, number of cross-validation splits in ridge_gridsearch_per_target. '''
         self.alphas = alphas
         self.voxel_selection = voxel_selection
         self.n_splits_gridsearch = n_splits_gridsearch
+        self.n_splits = n_splits
         self.var_explained = var_explained
         self.pca = None
         self.ridge_model = None
@@ -391,15 +393,20 @@ class myRidge():
             return self.ridge_model.predict(self.pca.transform(fmri))
         else:
             return self.ridge_model.predict(fmri)
+    
+    def transform(self, fmri, stim):
+        '''Method is written specifically for sklearn Pipeline.
+        It uses n_fold cross-validation to predict out of 
+        sample data X_new after being trained on X'''
+        pred_data = []
+        kfold = KFold(n_splits = self.n_splits)
+        for train, test in kfold.split(fmri, stim):
+            self.fit(fmri[test,:], stim[test, :])
+            pred_data.append(self.predict(fmri[test,:]))
+        pred_data = np.concatenate(pred_data, axis=0)
+        return pred_data
 
-class myCCA(CCA):
-    def __init__(self, n_components=10, **kwargs):
-        super().__init__(n_components = n_components, **kwargs)
-        self.predicted_data=None 
-         
-    def predict(self, fmri):
-        self.predicted_data = CCA.predict(self, fmri)
-        return self.predicted_data
+# myCCA is replaced with CCA not to implement fir_transform method manually
 
 class temporal_decoder:
     def __init__(self, decoder, decoder_config, lag_par):
