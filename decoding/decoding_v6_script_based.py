@@ -1,26 +1,24 @@
 #! /usr/bin/env python3
 'Decoding model with script_based approach'
 
+### Dependencies
 import numpy as np
 import copy
 import numpy as np
-import copy
-from encoding import  ridge_gridsearch_per_target
+import matplotlib.pyplot as plt
+from encoding import product_moment_corr, ridge_gridsearch_per_target
 from sklearn.cross_decomposition import CCA
 from sklearn.pipeline import Pipeline
-import sys
-import joblib
-import os
+from sklearn.model_selection import cross_val_predict
 from sklearn.cross_decomposition import CCA
-sys.path.append('/data/akitaitsev/data1/code/decoding/')
-from encoding import product_moment_corr, ridge_gridsearch_per_target
-import matplotlib.pyplot as plt
 from sklearn.model_selection import KFold
-import sklearn.metrics 
+import sys
+sys.path.append('/data/akitaitsev/data1/code/decoding/')
+import os
 import json
-import matplotlib.pyplot as plt
+import joblib
 
-###Helper functions
+### Helper functions
 
 def reduce_dimensionality(X, var_explained, examine_variance=False, **kwargs):
     ''' Function applys pca with user specified variance explained to the input data
@@ -72,7 +70,7 @@ def compute_correlation(real_mps, reconstructed_mps, **kwargs):
     correlations =[]
     for time in range(reconstructed_mps.shape[0]):
         correlations.append(np.corrcoef(real_mps[time,:], reconstructed_mps[time,:])[0,-1])
-    return np.reshape(np.array(correlations), (-1,1))
+    return np.array(correlations)
 
 def plot_score_across_features(score, score_name, mps_time, mps_freqs):
     ''' Function plots any sklearn score across features (1 value per feature over different MPSs) 
@@ -91,14 +89,15 @@ def plot_score_across_features(score, score_name, mps_time, mps_freqs):
     mps_time = np.array([float(el) for el in mps_time])
     mps_freqs = np.array([float(el) for el in mps_freqs])
     # x labels
+    format_str = lambda x: ["{:.1f}".format(el) for el in x]
     x_inds = np.around(np.linspace(0, len(mps_time), 10, endpoint=False)).astype(int)
     ax.set_xticks(x_inds)
-    ax.set_xticklabels(mps_time[x_inds])
+    ax.set_xticklabels(format_str(mps_time[x_inds]))
     ax.set_xlabel('modulation/s')
     # y labels
     y_inds = np.around(np.linspace(0, len(mps_freqs), 10, endpoint=False)).astype(int)
     ax.set_yticks(y_inds)
-    ax.set_yticklabels(mps_freqs[y_inds])
+    ax.set_yticklabels(format_str(mps_freqs[y_inds]))
     ax.set_ylabel('modulation/Hz')
     # colorbar
     cbar = fig.colorbar(im, ax=ax)
@@ -110,17 +109,19 @@ def plot_score_across_mps(score, score_name, ylim = None):
     Inputs:
         score - 1d numpy array of score (1 value per MPS)
         score_name - str, name of the score
-        ylim - list of 2 floats; Default = None
+        ylim - list of 2 floats; Default = [0,1]
      Outputs:
         fig - figure handle
      '''
     fig, ax = plt.subplots()
-    fig.suptitle(score_name + 'across different MPSs')
+    fig.suptitle(score_name + ' across different MPSs')
     ax.plot(score)
     ax.set_xlabel('MPS index')
-    ax.set_ylabel(score_name + 'per MPS')
+    ax.set_ylabel(score_name + ' per MPS')
     if ylim != None:
        ax.set_ylim([ylim[0],ylim[1]])
+    elif ylim == None:
+        ax.set_ylim([-1,1])
     return fig
 
 def reshape_mps(mps, mps_shape):
@@ -149,7 +150,8 @@ def plot_mps_and_reconstructed_mps(original_mps, reconstructed_mps, mps_time, mp
         fig_title         - str, optional, title of the figure (Default=None)
         kwargs            - arguments for imshow function
     Outputs:
-        fig - figure handle'''
+        fig - figure handle
+    '''
     fig, (ax1, ax2) = plt.subplots(1,2, figsize=(16,9)) 
     im1 = ax1.imshow(original_mps, origin='lower', aspect='auto')
     im2 = ax2.imshow(reconstructed_mps, origin='lower', aspect='auto') 
@@ -160,26 +162,31 @@ def plot_mps_and_reconstructed_mps(original_mps, reconstructed_mps, mps_time, mp
     ax1.title.set_text('Original MPS')
     ax2.title.set_text('Reconstructed MPS')
     # x labels
+    format_str = lambda x: ["{:.1f}".format(el) for el in x]
     x_inds = np.around(np.linspace(0, len(mps_time), 10, endpoint=False)).astype(int)
     ax1.set_xticks(x_inds)
-    ax1.set_xticklabels(mps_time[x_inds])
+    ax1.set_xticklabels(format_str(mps_time[x_inds]))
     ax1.set_xlabel('modulation/s')
     ax2.set_xticks(x_inds)
-    ax2.set_xticklabels(mps_time[x_inds])
+    ax2.set_xticklabels(format_str(mps_time[x_inds]))
     ax2.set_xlabel('modulation/s')
     # y labels
     y_inds = np.around(np.linspace(0, len(mps_freqs), 10, endpoint=False)).astype(int)
     ax1.set_yticks(y_inds)
-    ax1.set_yticklabels(mps_freqs[y_inds])
-    ax1.set_ylabel('modulation/s')
+    ax1.set_yticklabels(format_str(mps_freqs[y_inds]))
+    ax1.set_ylabel('modulation/Hz')
     ax2.set_yticks(y_inds)
-    ax2.set_yticklabels(mps_freqs[y_inds])
+    ax2.set_yticklabels(format_str(mps_freqs[y_inds]))
     ax2.set_ylabel('modulation/Hz')
     # colorbar
+    max_value = max([np.amax(original_mps),np.amax(reconstructed_mps)]) 
+    min_value = min([np.amin(original_mps), np.amin(reconstructed_mps)])
     cbar1 = fig.colorbar(im1, ax=ax1)
     cbar1.set_label('log MPS')
+    cbar1.mappable.set_clim(min_value, max_value)
     cbar2 = fig.colorbar(im2, ax=ax2)
     cbar2.set_label('log MPS')
+    cbar2.mappable.set_clim(min_value, max_value)
     # figure title
     if not fig_title is None:
         fig.suptitle(fig_title)
@@ -205,11 +212,11 @@ def assess_predictions(orig_stim, predicted_stim, parameters, primary_stim_shape
     r2 = product_moment_corr(orig_stim, predicted_stim) 
     resh_r2 = lambda x: np.reshape(x, ((tuple(map(int, parameters[0]['mps_shape'])))))
     r2 = resh_r2(r2)
-    fig_r2 = plot_score_across_features(r2, 'Correlation coefficient', parameters[0]['mps_time'], parameters[0]['mps_freqs']) 
+    fig_r2 = plot_score_across_features(r2, 'Correlation coefficients', parameters[0]['mps_time'], parameters[0]['mps_freqs']) 
      
     # compute correlation across different MPSs between reconstructed MPSs  and original MPSs and plot it
     correlations = compute_correlation(orig_stim, predicted_stim) 
-    fig_cor = plot_score_across_mps(correlations, 'Correlation', [0,1])
+    fig_cor = plot_score_across_mps(correlations, 'Correlation')
     
     # denormalize original and reconstructed MPS
     denorm_orig_stim = []
@@ -239,7 +246,6 @@ def assess_predictions(orig_stim, predicted_stim, parameters, primary_stim_shape
     worst_mps_ind = np.argmin(np.squeeze(np.abs(correlations)))
     worst_mps = np.squeeze(reconstr_mps[:,:,worst_mps_ind]) 
      
-    worst_mps[:,100] = worst_mps[:,100] - worst_mps[:,100] 
     fig_mps_worst = plot_mps_and_reconstructed_mps(orig_mps[:,:,worst_mps_ind], worst_mps,\
         parameters[0]['mps_time'],  parameters[0]['mps_freqs'], 'Worst MPS')
 
@@ -303,8 +309,6 @@ def stack_runs(fmri_runs, stim_runs, stim_param_list, subj_num):
     min_nvox = min([run.shape[1] for run in fmri_runs])
     fmri_runs_cropped = [run[:,:min_nvox] for run in fmri_runs]
     
-    # TODO? crop stimuli?
-
     # concatenate multirun data
     fmri_multirun = np.concatenate(fmri_runs_cropped, axis=0)
     stim_multirun = np.concatenate(stim_runs, axis=0)
@@ -376,7 +380,7 @@ class myRidge():
         if self.voxel_selection:
             voxel_var = np.var(fmri, axis=0)
             fmri = fmri[:,voxel_var > 0.]
-        if self.alphas is None:
+        if self.alphas is None or len(self.alphas) ==1:
             self.alphas = [1000]
         else:
             self.alphas = np.logspace(self.alphas[0], self.alphas[1], self.alphas[2])
@@ -394,19 +398,19 @@ class myRidge():
         else:
             return self.ridge_model.predict(fmri)
     
-    def transform(self, fmri, stim):
+    def fit_transform(self, fmri, stim):
         '''Method is written specifically for sklearn Pipeline.
         It uses n_fold cross-validation to predict out of 
         sample data X_new after being trained on X'''
         pred_data = []
         kfold = KFold(n_splits = self.n_splits)
         for train, test in kfold.split(fmri, stim):
-            self.fit(fmri[test,:], stim[test, :])
+            self.fit(fmri[train,:], stim[train,:])
             pred_data.append(self.predict(fmri[test,:]))
         pred_data = np.concatenate(pred_data, axis=0)
+        self.fit(fmri,stim)
         return pred_data
 
-# myCCA is replaced with CCA not to implement fir_transform method manually
 
 class temporal_decoder:
     def __init__(self, decoder, decoder_config, lag_par):
@@ -434,20 +438,23 @@ def decode(fmri, stim, decoder, n_splits=8):
         predictions - 2d numpy array of predicted stimulus representation
     '''
     # preallocate outputs
-    decoders = []
-    predictions = []
+    #decoders = []
+    #predictions = []
     # create cross-validation object
     kfold = KFold(n_splits=n_splits)
-    for train, test in kfold.split(fmri, stim):
-        # copy decoder object
-        dec = copy.deepcopy(decoder)
-        decoders.append(dec)
-        # fit a copy of decoder object on train split
-        decoders[-1].fit(fmri[train,:], stim[train,:])
-        # predict stimulus from trained object
-        predictions.append(decoders[-1].predict(fmri[test,:]))
-        # concatenate predictions
-    predictions = np.concatenate(predictions, axis=0)
+    predictions=cross_val_predict(decoder, fmri, stim, cv=kfold, n_jobs=n_splits)
+    
+    
+    #for train, test in kfold.split(fmri, stim):
+    #    # copy decoder object
+    #    dec = copy.deepcopy(decoder)
+    #    decoders.append(dec)
+    #    # fit a copy of decoder object on train split
+    #    decoders[-1].fit(fmri[train,:], stim[train,:])
+    #    # predict stimulus from trained object
+    #    predictions.append(decoders[-1].predict(fmri[test,:]))
+    #    # concatenate predictions
+    #predictions = np.concatenate(predictions, axis=0)
     return predictions
 
 
