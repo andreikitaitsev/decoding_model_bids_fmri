@@ -27,7 +27,7 @@ def standardize_mps(mps, return_mean_and_sd=False):
     ''' 
     mean = np.mean(mps, axis=0)
     sd = np.std(mps, axis = 0)
-    std_mps = np.divide((mps-mean), np.std(mps, axis = 0))
+    std_mps = (mps-mean)/sd
     if return_mean_and_sd:
         return std_mps, mean, sd
     else:
@@ -98,9 +98,9 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
     if hop_length_mps >= spectrogram.shape[1]:
         raise ValueError('step size of fft window (hop_length_mps) for modulation power spectrum exceeds length of spectrogram ')
     
-    # calculate stepsize on frequency and time axes of spectrogram
-    step_size_spec_time = hop_length_stft/sr #sec/sample
-    step_size_spec_freq =  sr/n_fft_stft # Hz/sample - fundamental frequency
+    # calculate step size on frequency and time axes of spectrogram
+    step_size_spec_time = hop_length_stft/sr # how many seconds between 2 samples on time axis
+    step_size_spec_freq =  sr/n_fft_stft # how many Hz between 2 samples
     
     
     ## Transform spectrogram in accordance with input parametres
@@ -122,10 +122,10 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
     
     # Step sizes of MPS
     step_size_mps_time = hop_length_mps * step_size_spec_time
-    step_size_mps_freq = step_size_spec_freq
+    sstep_size_mps_freq = 2*step_size_spec_freq # 2 because we rejected half of freqs (Nyquist)
 
     fft_window = np.linspace(0,n_fft_mps-1,n_fft_mps,endpoint=True)
-    hop_list = [hop for hop in range(0,spectrogram.shape[1]//n_fft_mps)]
+    hop_list = [hop for hop in range(0,int(spectrogram.shape[1]//hop_length_mps - np.ceil(n_fft_mps/hop_length_mps)))]
     Nyquist_mps_freq = int(np.ceil(spectrogram.shape[0]/2)) # Nyquist on modulation/Hz axis
     
     for iter in hop_list:
@@ -134,8 +134,8 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
                                       **{argnt: kwargs["argnt"] for argnt in ['s','axes','norm'] if argnt in kwargs})) ) )
         
         # get axes units for MPS
-        mps_time = np.fft.fftshift( np.fft.fftfreq(fft_window.shape[0], d = step_size_spec_time) ) # modulation/ s
-        mps_freqs = np.fft.fftshift( np.fft.fftfreq(mps_iter.shape[0], d = 1/ step_size_spec_freq) )# modulation/ Hz
+        mps_time = np.fft.fftshift( np.fft.fftfreq(mps_iter.shape[1], d = step_size_spec_time) ) # modulation/ s
+        mps_freqs = np.fft.fftshift( np.fft.fftfreq(mps_iter.shape[0], d =  1/step_size_spec_freq) )# modulation/ Hz
 
         # reject mirrored frequencies on Y axis (modulations/Hz) 
         mps_iter = mps_iter[Nyquist_mps_freq:, :]  
@@ -162,14 +162,14 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
             "is less, than step size of mod/Hz axis. mod/Hz feature names will be aliased" +\
                           "\n number of decimals you chose: " + str(dec) + \
                              "\n step size mod/Hz: " + str(step_size_mps_freq)
-        warnings.warn(warn_message_freq, RuntimeWarning())
+        warnings.warn(warn_message_freq)
     # check if dec is smaller than step_size_mps_time
     if np.round(np.abs(mps_time[1] - mps_time[0]), decimals = dec) == 0:
         warn_message_time = "The amount of decimals to round feature names you have chosen" + \
             "is less, than step size of mod/s axis. mod/s feature names will be aliased"+  \
                           "\n number of decimals you chose: " + str(dec) +\
                               "\n step size mod/Hz: " + str(step_size_mps_time)
-        warnings.warn(warn_message_time, RuntimeWarning())    
+        warnings.warn(warn_message_time)    
     
     ## create feature names array        
     mps_freqs_crop = mps_freqs[ np.where(mps_freqs <= cutoff_spectr_mod)[0] ]
@@ -185,7 +185,7 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
     if plot_spectr:
         # compute time and frequency axes
         time_s =  fft_window * step_size_spec_time
-        frequs_hz = np.linspace(0, spectrogram.shape[0], spectrogram.shape[0],endpoint=False) * step_size_mps_freq 
+        frequs_hz = np.linspace(0, spectrogram.shape[0], spectrogram.shape[0],endpoint=False) * step_size_spec_freq 
         # plot
         fig1,ax=plt.subplots()
         img = ax.imshow(spectrogram[:,fft_window.astype(int)], origin='lower', aspect='auto')
@@ -208,18 +208,20 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
             clb.set_label('log amplitude')
         elif dB:
             clb.set_label('dB')
-        
-    # Plot MPS
+        elif not log and use_power:
+            clb.set_label('Power')
+   
+   # Plot MPS
     if plot_mps:
         fig2, ax = plt.subplots()
         graph=ax.imshow(np.log(mps_accum[0]), origin='lower', aspect='auto') 
-        xtickind = np.around(np.linspace(0, len(mps_time), 10, endpoint = False)).astype(int)
+        xtickind = np.around(np.linspace(0, len(mps_time_crop), 10, endpoint = False)).astype(int)
         ax.set_xticks(xtickind)
-        ax.set_xticklabels( [ '{:.0f}'.format(el) for el in mps_time[xtickind] ])
+        ax.set_xticklabels( [ '{:.0f}'.format(el) for el in mps_time_crop[xtickind] ])
         
-        ytickind = np.around(np.linspace(0, mps_accum[0].shape[0], 10, endpoint = False) ).astype(int)
+        ytickind = np.around(np.linspace(0, len(mps_freqs_crop), 10, endpoint = False) ).astype(int)
         ax.set_yticks(ytickind)
-        ax.set_yticklabels( [ '{:.0f}'.format(el) for el in mps_freqs[ytickind] ])
+        ax.set_yticklabels( [ '{:.0f}'.format(el) for el in mps_freqs_crop[ytickind] ])
         ax.set_title("log of MPS of the 1st window")
         ax.set_xlabel("Modulation/second")
         ax.set_ylabel("Modulation/Hz")
@@ -227,8 +229,8 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
         cbar.set_label("log(MPS)")
         
     ## create dictionary with parametres for json file
-    mps_freqs = [str(freq) for freq in mps_freqs]
-    mps_time = [str(time) for time in mps_time]
+    mps_freqs = ['{:.0f}'.format(freq) for freq in mps_freqs_crop]
+    mps_time = ['{:.0f}'.format(time) for time in mps_time_crop]
     mps_repetition_time = step_size_mps_time
     parameters = {'sr':sr,'hop_length_stft': hop_length_stft,'n_fft_stft': n_fft_stft, 'n_fft_mps': n_fft_mps, \
                 'hop_length_mps':hop_length_mps, 'dB': dB, 'log':log, 'use_power': use_power, \

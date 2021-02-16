@@ -9,7 +9,7 @@ wavfiles="0.wav 1.wav 2.wav 3.wav 4.wav 5.wav 6.wav 7.wav" # list of wav files t
 outpath=$workdir"raw_data/processed_stimuli/" # tmp out path; later these files will be distributed according to bids folder structure 
 # Read mps config - note in this case it is similar for every subject
 # This config is adapted to have stimulus TR == fmri TR == 2s
-mps_config=$workdir"code/audio2bidsstim/mps_input_config1.json"
+mps_config=$workdir"code/audio2bidsstim/mps_input_config_exp1.json"
 
 
 
