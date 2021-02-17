@@ -6,8 +6,9 @@ import glob
 
 def copy_files(from_dir, to_dir):
     for _, folders, __ in os.walk(from_dir): 
-        for folder in folders: 
-            if 'sub' in folder: 
+        for folder in folders:
+            import ipdb; ipdb.set_trace()
+            if 'sub' in folder:
                 for file in os.listdir( os.path.join(from_dir,folder)):
                     if 'aomovie' in file and 'bold.nii.gz' in file:
                         shutil.copy(os.path.join(from_dir,folder,file),\

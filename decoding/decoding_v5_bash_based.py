@@ -1,8 +1,13 @@
 #! /usr/bin/env python3
+'Decoding model with bahs-based approach'
+
+import numpy as np
+import copy
 import numpy as np
 import copy
 from encoding import  ridge_gridsearch_per_target
 from sklearn.cross_decomposition import CCA
+from sklearn.pipeline import Pipeline
 import sys
 import joblib
 import os
@@ -15,7 +20,8 @@ import sklearn.metrics
 import json
 import matplotlib.pyplot as plt
 
-# Helper fucntions 
+###Helper functions
+
 def reduce_dimensionality(X, var_explained, examine_variance=False, **kwargs):
     ''' Function applys pca with user specified variance explained to the input data
     Inputs:
@@ -180,158 +186,6 @@ def plot_mps_and_reconstructed_mps(original_mps, reconstructed_mps, mps_time, mp
     return fig
 
 
-# Custom decoder classes
-class myRidge:
-    def __init__(self, alphas = None, voxel_selection=True, var_explained=None, n_splits_gridsearch = 5, **kwargs):
-        '''
-        kwargs - additional arguments transferred to ridge_gridsearch_per_target
-        alphas - list of 3 int (start, stop, num parameters in numpy logspace function),
-                 optional. Default = 1000
-                 Regularization parameters to be used for Ridge regression
-        voxel_selection - bool, optional, default True
-                          Whether to only use voxels with variance larger than zero.
-        var_explained - float, whether to do pca on frmi with defiend variance explained. 
-        Default = None (no pca)
-        n_splits_gridsearch - int, number of cross-validation splits in ridge_gridsearch_per_target. '''
-        self.alphas = alphas
-        self.voxel_selection = voxel_selection
-        self.n_splits_gridsearch = n_splits_gridsearch
-        self.var_explained = var_explained
-        self.pca = None
-        self.ridge_model = None
-        self.predicted_stim = None
-    
-    def fit(self, fmri, stim):
-        '''Fit ridges to stimulus and frmi using k fold cross validation and voxel selection
-        fmri - 2d numpy array of bold fmri data of shape (samples, voxels)
-        stim - 2d numpy array of stimulus representation of shape (samples, features)
-        '''
-        if self.voxel_selection:
-            voxel_var = np.var(fmri, axis=0)
-            fmri = fmri[:,voxel_var > 0.]
-        if self.alphas is None:
-            self.alphas = [1000]
-        else:
-            self.alphas = np.logspace(self.alphas[0], self.alphas[1], self.alphas[2])
-        if self.var_explained != None:
-            # return pca object and keep it
-            fmri, pca, _ = reduce_dimensionality(fmri, self.var_explained)
-            self.pca = pca
-        self.ridge_model = ridge_gridsearch_per_target(fmri, stim, self.alphas, n_splits = self.n_splits_gridsearch)
-    
-    def predict(self, fmri):
-        ''' Returns the stimulus predicted from model trained on test set'''
-        self.predicted_stim = self.ridge_model.predict(self.pca.transform(fmri))
-        return self.predicted_stim
-
-
-class myCCA(CCA):
-    def __init__(self, n_components=10, **kwargs):
-        super().__init__(n_components = n_components, **kwargs)
-        self.predicted_data=None 
-         
-    def predict(self, fmri):
-        self.predicted_data = CCA.predict(self, fmri)
-        return self.predicted_data
-
-
-class STM:
-    '''Spatial Temporal Model.
-    Attributes:
-    cv_sp - cv splitter object or int for spatial decoder, see cross_val_predict doc
-    cv_tmp - cv splitter object or int for temporal decoder, see cross_val_predict doc
-    decoder_sp - decoder object to use as spatial decoder or string which will be evaluated
-    decoder_tmp - decoder object to use as temporal decoder or string which will be evaluated
-    config_decoder_sp - parameters for spatial decoder
-    config_decoder_tmp - parameters for temporal decoder
-    tmp_lag - int - lagging parameter for temporal model (~number of rows to stack into one)
-    Note, that decoders
-    '''
-    
-    def __init__(self, cv_sp, cv_tmp, decoder_sp, decoder_tmp, config_decoder_sp, config_decoder_tmp, tmp_lag):
-        self.cv_sp = cv_sp
-        self.cv_tmp = cv_tmp
-        try:
-            self.decoder_sp = eval(decoder_sp)
-            self.decoder_sp = self.decoder_sp(**config_decoder_sp)
-        except:
-            self.decoder_sp = decoder_sp(**config_decoder_sp)
-        try:
-            self.decoder_tmp = eval(decoder_tmp)
-            self.decoder_tmp = self.decoder_tmp(**config_decoder_tmp)
-        except:
-            self.decoder_tmp = decoder_tmp(**config_decoder_tmp)
-        self.config_decoder_sp = config_decoder_sp
-        self.config_decoder_tmp = condif_decoder_tmp
-        self.tmp_lag = tmp_lag
-        self.pred_sp = None
-        self.stim_lagged = None
-        self.pred_sp_lagged = None
-        self.pred_tmp = None
-    
-    def fit(self, fmri, stim):    
-        # fit spatial decoder
-        self.decoder_sp = self.decoder_sp.fit(fmri, stim)
-        # get predictions of spatial decoder
-        self.pred_sp = self.decoder_sp.predict(
-        
-        def lag(self):
-            # check if number of timepoints divided into tmp_lag has a remainder
-            rem = slef.pred_sp.shape[0] % self.tmp_lag
-            if rem != 0:
-                self.pred_sp = self.pred_sp[:rem,:]
-                warnings.warn("tmp_lag does not fit the shape of the stimulus. The last "+str(rem)+\
-                    " rows of stimulus were deleted.")
-            # "lagging" - reshapeing
-            self.pred_tmp = np.reshape(self.pred_sp, (int(self.pred_sp.shape[0]/tmp_lag), int(self.pred_sp.shape[1]*tmp_lag)))
-            # delete "redundant" time points from pred_sp
-            self.pred_sp = self.pred_sp[:rem,:]
-        
-        ## fit spatial decoder
-        self.pred_sp = cross_val_predict(self.decoder_sp, fmri, stim, cv = self.cv_sp)
-        
-        ## fit temporal decoder 
-        lag_predictions(self)
-        self.pred_tmp = cross_val_predict(self.decoder_tmp, self.pred_sp, self.pred_tmp, cv=self.cv_tmp)  
-
-
-# Decoding functions
-
-def decode_single_run(fmri, stim, decoder, decoder_config, n_splits=8):
-    '''Runs decoding one stimulus and fmri runi
-    Inputs:
-        fmri - 2d numpy array of preprocessed fmri
-        stim - 2d numpy array of  preprocessed stim
-        decoder - decoder object with .fit and .predict methods
-        decoder_config - dictionary with the config for decoder
-        n_splits - int, number of cross-validation splits;
-        Default = 8.
-    Outputs:
-        predictions - 2d numpy array of predicted stimulus representation
-        cv_indices - dictionary of train and test indices for each 
-        cross-validation split
-    '''
-    # preallocate outputs
-    decoders = []
-    predictions = []
-    cv_indices = {'train':[],'test':[]}
-    # create cross-validation object
-    kfold = KFold(n_splits=n_splits)
-    for train, test in kfold.split(fmri, stim):
-        # copy decoder object
-        dec = copy.deepcopy(decoder(**decoder_config))
-        decoders.append(dec)
-        # fit a copy of decoder object on train split
-        decoders[-1].fit(fmri[train,:], stim[train,:])
-        # predict stimulus from trained object
-        predictions.append(decoders[-1].predict(fmri[test,:]))
-        # save cross-validation indices for evaluation of predictions
-        cv_indices['train'].append(train)
-        cv_indices['test'].append(test)
-        # concatenate predictions
-    predictions = np.concatenate(predictions, axis=0)
-    return predictions, cv_indices, decoders
-
 def assess_predictions(orig_stim, predicted_stim, parameters):
     ''' Function computes user-defined measures of quality of predictions between 
     original and predicted data)
@@ -402,8 +256,177 @@ def denormalize(stim, parameters):
     stim = stim*sd + mean
     return stim
 
+def params_are_equal(params_list):
+    '''Function to check if all the parameters of feature extractor 
+    in different runs of a signle subject are equal.
+    Inputs:
+        params - list of dictionaries (stim_param) - outputs of the feature 
+                 extractor for each run
+    Outputs:
+        params_equal - logical, True if all the parameters are equal for every
+                       dict in params list
+    '''
+    params_equal = True
+    for run_num in range(0, len(params_list)-1):
+        for key in params_list[run_num].keys():
+            if not params_list[run_num][str(key)] == params_list[run_num+1][str(key)] and \
+                key != 'mps_mean' and key != 'mps_sd':
+                params_equal = False
+                break
+    return params_equal
 
-def decoding_model(inp_data_dir, out_dir, stim_param_dir, decoder_config, model_config):
+def stack_runs(fmri_runs, stim_runs, stim_param_list, subj_num):
+    '''Function stacks fmri and stim from different runs into 2 2d numpy arrays
+    and checks that stim parameters of samples are consistent between runs'''
+
+    # make sure stim parameters are the same for all runs    
+    if not params_are_equal(stim_param_list):
+        raise ValueError("Stimuli parameters are not equal between runs for subject "+\
+        str(subj_num) + "!")
+    
+    # concatenate multirun data
+    fmri_multirun = np.concatenate(fmri_runs, axis=0)
+    stim_multirun = np.concatenate(stim_runs, axis=0)
+    return fmri_multirun, stim_multirun
+
+def invoke_decoders(decoders, decoders_configs):
+    '''Function creates decoder objects and configures them.
+    Inputs:
+        decoders - list of strings, decoder names
+        decoders_configs - list of dictionaries - decoder-specific configs
+    Outputs:
+        invoked_decoders - list of configured decoder objects
+    '''
+    invoked_decoders = []
+    for dec_num in range(len(decoders)):
+        decoder = eval(decoders[dec_num])
+        decoder = decoder(**decoders_configs[dec_num])
+        invoked_decoders.append(decoder)
+    return invoked_decoders
+
+def lag(X, lag_par):
+    '''
+    Inputs:
+        X -2d numpy array
+        lag_par - int
+    Outputs:
+        X_lagged - 2d numpy array
+    '''
+    X_lagged = []
+    x_iter = X.copy()
+    for i in range(1, lag_par+1):
+        x_iter[-i,:] = np.zeros(X.shape[1])
+        X_lagged.append(x_iter.copy())
+    return np.concatenate(X_lagged, axis=1)
+
+### Custom decoder classes
+
+class myRidge:
+    def __init__(self, alphas = None, voxel_selection=True, var_explained=None, n_splits_gridsearch = 5, **kwargs):
+        '''
+        kwargs - additional arguments transferred to ridge_gridsearch_per_target
+        alphas - list of 3 int (start, stop, num parameters in numpy logspace function),
+                 optional. Default = 1000
+                 Regularization parameters to be used for Ridge regression
+        voxel_selection - bool, optional, default True
+                          Whether to only use voxels with variance larger than zero.
+        var_explained - float, whether to do pca on frmi with defiend variance explained. 
+        Default = None (no pca)
+        n_splits_gridsearch - int, number of cross-validation splits in ridge_gridsearch_per_target. '''
+        self.alphas = alphas
+        self.voxel_selection = voxel_selection
+        self.n_splits_gridsearch = n_splits_gridsearch
+        self.var_explained = var_explained
+        self.pca = None
+        self.ridge_model = None
+        self.predicted_stim = None
+    
+    def fit(self, fmri, stim):
+        '''Fit ridges to stimulus and frmi using k fold cross validation and voxel selection
+        fmri - 2d numpy array of bold fmri data of shape (samples, voxels)
+        stim - 2d numpy array of stimulus representation of shape (samples, features)
+        '''
+        if self.voxel_selection:
+            voxel_var = np.var(fmri, axis=0)
+            fmri = fmri[:,voxel_var > 0.]
+        if self.alphas is None:
+            self.alphas = [1000]
+        else:
+            self.alphas = np.logspace(self.alphas[0], self.alphas[1], self.alphas[2])
+        if self.var_explained != None:
+            # return pca object and keep it
+            fmri, pca, _ = reduce_dimensionality(fmri, self.var_explained)
+            self.pca = pca
+        self.ridge_model = ridge_gridsearch_per_target(fmri, stim, self.alphas, n_splits = self.n_splits_gridsearch)
+    
+    def predict(self, fmri):
+        ''' Returns the stimulus predicted from model trained on test set'''
+        self.predicted_stim = self.ridge_model.predict(self.pca.transform(fmri))
+        return self.predicted_stim
+
+
+class myCCA(CCA):
+    def __init__(self, n_components=10, **kwargs):
+        super().__init__(n_components = n_components, **kwargs)
+        self.predicted_data=None 
+         
+    def predict(self, fmri):
+        self.predicted_data = CCA.predict(self, fmri)
+        return self.predicted_data
+
+class temporal_decoder():
+    def __init__(self, decoder, lag_par):
+    '''Note that decoder object shall be configured beforehands'''
+        self.lag_par = lag_par
+        self.decoder = decoder()
+        self.x_lagged = None
+        self.y = None
+    def fit(self, x, y):
+        self.x_lagged = lag(x, self.lag_par)
+        self.y = y
+        self.decoder = self.decoder.fit(self.x_lagged,y)
+    def predict(self, x)
+        self.predictions = self.decoder.predict(self.x)
+        return self.predictions
+
+
+
+### Decoding functions
+
+def decode(fmri, stim, decoder, decoder_config, n_splits=8):
+    '''Runs decoding one stimulus and fmri runi
+    Inputs:
+        fmri - 2d numpy array of preprocessed fmri
+        stim - 2d numpy array of  preprocessed stim
+        decoder - decoder object with .fit and .predict methods
+        decoder_config - dictionary with the config for decoder
+        n_splits - int, number of cross-validation splits;
+        Default = 8.
+    Outputs:
+        predictions - 2d numpy array of predicted stimulus representation
+        cv_indices - dictionary of train and test indices for each 
+        cross-validation split
+    '''
+    # preallocate outputs
+    decoders = []
+    predictions = []
+    # create cross-validation object
+    kfold = KFold(n_splits=n_splits)
+    for train, test in kfold.split(fmri, stim):
+        # copy decoder object
+        dec = copy.deepcopy(decoder(**decoder_config))
+        decoders.append(dec)
+        # fit a copy of decoder object on train split
+        decoders[-1].fit(fmri[train,:], stim[train,:])
+        # predict stimulus from trained object
+        predictions.append(decoders[-1].predict(fmri[test,:]))
+        # concatenate predictions
+    predictions = np.concatenate(predictions, axis=0)
+    return predictions
+
+
+
+def run_decoding(inp_data_dir, out_dir, stim_param_dir, model_config, decoding_config):
 
     ### Input check (as model takes long time to run (would a be pity to find a glitch after running model for days:) )
     
@@ -455,8 +478,10 @@ def decoding_model(inp_data_dir, out_dir, stim_param_dir, decoder_config, model_
             elif proceed =='y':
                 pass
 
-    ### Run decoding
-    
+    ### multirun_decoding
+    fmri_multirun = []
+    stim_multirun = []
+    parameters_multirun=[]
     for subj_counter, subj_num in enumerate(subjects):
         subj_folder = 'sub-'+ str(subj_num) 
         subj_folder_path = os.path.join(inp_data_dir, subj_folder)
@@ -483,70 +508,47 @@ def decoding_model(inp_data_dir, out_dir, stim_param_dir, decoder_config, model_
                         'stimulus shape was'+ str(y.shape)+ 'instead')
             with open(stim_param_path, 'r') as par:
                 parameters = json.load(par)
+
+            # Append run
+            fmri_multirun.append(fmri)
+            stim_multirun.append(stim)
+            parameters_multirun.append(parameters)
+        
+        # get concatenated multirun datasets
+        fmri_multirun, stim_multirun = stack_runs(fmri_multirun, stim_multirun, parameters_multirun, subj_num)
+        
+        # run decoding
+
+
+
+        decoders = invoke_decoders([decoding_config["spatial_decoder"], decoding_config["temporal_decoder"]], \
+                [decoding_config["spatial_decoder_config"], decoding_config["temporal_decoder_config"]])
             
-            # create decoder object
-            try:
-                decoder = eval(model_config["decoder"])
-            except:
-                print("Cannot create decoder " + str(model_config["decoder"])+'.')
-                break
+            predictions_sp, predictions_tmpo = STM_decoding(fmri_multirun, stim_multirun, decoders[0],\
+                decoders[1], decoding_config["cv_spatial"], decoding_config["cv_temporal"], decoding_config["temporal_lagging"])
 
-            # run decode_single_run       
-            print('running decode_single_run on subject', str(subjects[subj_counter]),' run ',\
-                str(run_num))
-            predictions, cv_indices, decoders = decode_single_run(fmri, stim, decoder, decoder_config) 
             
-            # run assess_predictions
-            assessments = assess_predictions(stim, predictions, parameters)
-            
-            # save model data into subject-specific folder in the out_dir
-            print('saving model data for subject ', str(subjects[subj_counter]), \
-                'run ', str(run_num) + '...')
-            decoder_name = model_config["decoder"] + '_run-' + str(run_num) + '.pkl'
-            predictions_name = 'reconstructed_mps_run-' + str(run_num) + '.pkl'
-            cv_indices_name = 'cv_indices_run-' + str(run_num) + '.pkl'
-            #joblib.dump(decoders, os.path.join(out_dir, subj_folder, decoder_name),compress=9)
-            joblib.dump(predictions, os.path.join(out_dir, subj_folder, predictions_name))
-            joblib.dump(cv_indices, os.path.join(out_dir, subj_folder, cv_indices_name)) 
+        # assess predictions
+        assessments = assess_predictions(stim, predictions, parameters)
+        
+        # save model data into subject-specific folder in the out_dir
+        print('saving model data for subject ', str(subjects[subj_counter]) + "...")
+        predictions_name = 'reconstructed_mps_run-' + str(run_num) + '.pkl'
+        joblib.dump(predictions, os.path.join(out_dir, subj_folder, predictions_name))
 
-            # save assessment data
-            for assessment in assessments.keys():
-                filename = assessment + '_run-' + str(run_num) + '.pkl'
-                joblib.dump(assessments[assessment], os.path.join(out_dir, subj_folder, filename))
+        # save assessment data
+        for assessment in assessments.keys():
+            filename = assessment + '_run-' + str(run_num) + '.pkl'
+            joblib.dump(assessments[assessment], os.path.join(out_dir, subj_folder, filename))
 
-            # save figures (fig_cor, fig_mse, fig_mps_best, fig_mps_worst, fig_mps_medium) 
-            for fig in assessments["figs"].keys():
-                fig_name = fig + '_run-' + str(run_num) + '.png'
-                fig_filename = os.path.join(out_dir, subj_folder, fig_name)
-                assessments["figs"][fig].savefig(fig_filename, dpi = 300)
-          
-if __name__ == '__main__':
-    
-    import argparse
-    parser = argparse.ArgumentParser(description='Decoding model app. Reconstructs modulation power spectrum from aligned \n'
-    'preprocessed stimulus and fmri data. User specifies input dir, output dir, decoder_config \n'
-    'and model_config file paths. \n'
-    'decoder_config shall contain valid arguments for user-specifeid type of decoder. \n'
-    'Model_config files shall be .json file containing valid arguments for decoding_model function and decoder type. \n' 
-    'Note the default values for model_config parameters (if not specified in model_config file): \n'
-    'subjects 01, 02, 03, 04, 05, 06, 09, 10, 14, 15, 16, 17, 18, 19, 20 \n'  
-    'runs 1, 2, 3, 4, 5, 6, 7, 8 \n', formatter_class=argparse.RawTextHelpFormatter ) 
-    
-    parser.add_argument('-inp','--input_dir', type=str, help='Path to preprocessed stimuli and fmri')
-    parser.add_argument('-out','--output_dir', type=str, help='Path to the output directory where the model \
-    data shall be saved. Folder structure can be pre-created or absent')
-    parser.add_argument('-dec_conf', '--decoder_config', type=str, help='Path to the json file with decoder config')
-    parser.add_argument('-mod_conf','--model_config', type=str, help=\
-    'Path to json model config file containing stim_param_dir, subject list, list of lists of runs and decoder. \n' 
-    'IT IS RECOMMENDED TO STORE BOTH CONFIG FILES IN THE OUTPUT DIR.') 
-    args = parser.parse_args()
-    with open (args.decoder_config) as dconf:
-        dec_config = json.load(dconf)
-    with open(args.model_config) as mconf:
-        mod_config = json.load(mconf)   
-    
-    stim_param_dir = mod_config['stim_param_dir']
-    
-    # RUN DECODING MODEL WITH THE GIVEN ARGUMENTS   
-    decoding_model(args.input_dir, args.output_dir, stim_param_dir, dec_config, mod_config)
+        # save figures (fig_cor, fig_mse, fig_mps_best, fig_mps_worst, fig_mps_medium) 
+        for fig in assessments["figs"].keys():
+            fig_name = fig + '_run-' + str(run_num) + '.png'
+            fig_filename = os.path.join(out_dir, subj_folder, fig_name)
+            assessments["figs"][fig].savefig(fig_filename, dpi = 300)
+         
 
+
+
+
+### Command line interface

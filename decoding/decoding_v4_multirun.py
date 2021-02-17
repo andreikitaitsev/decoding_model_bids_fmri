@@ -181,7 +181,7 @@ def plot_mps_and_reconstructed_mps(original_mps, reconstructed_mps, mps_time, mp
     return fig
 
 
-def assess_predictions(orig_stim, predicted_stim, parameters):
+def assess_predictions(orig_stim, predicted_stim, parameters, model_type):
     ''' Function computes user-defined measures of quality of predictions between 
     original and predicted data)
     Inputs:
@@ -192,6 +192,11 @@ def assess_predictions(orig_stim, predicted_stim, parameters):
         assessments - dictionary of user specified assessment quantities
     '''
         
+    # account for lagging in STM
+    if model_type == 'STM':
+        parameters["mps_shape"][0] = int(parameters["mps_shape"][0]/tmp_lag)
+        parameters["mps_shape"][1] = int(parameters["mps_shape"][1]*tmp_lag)
+
     # compute correlation coefficient for every feature across different MPSs and plot it
     r2 = product_moment_corr(orig_stim, predicted_stim) 
     resh_r2 = lambda x: np.reshape(x, (parameters['mps_shape']))

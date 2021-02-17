@@ -1,3 +1,4 @@
+
 #! /usr/bin/env python3
 'Decoding model with script_based approach'
 
@@ -142,7 +143,7 @@ def reshape_mps(mps, mps_shape):
         mps - 2d numpy array of shape (n_mps, n_features) - output of make_X_Y function for a single wav file
         mps_shape - tuple(mod/s, mod/Hz) - shape of a single MPS stored in stimulus parameters json file
     Outputs:
-        reshaped_mps - 3d numpy array of shape (n_mps, mod/s, mod/Hz) - same shape as original MPS
+        reshaped_mps - 3d numpy array of shape (mod/s, mod/Hz, n_mps) - same shape as original MPS
     '''
     #resahpe to shape (n_mps, mod/s, mod/Hz)
     reshaped_mps = np.reshape(mps, (-1, mps_shape[0], mps_shape[1]))
@@ -474,24 +475,24 @@ def decode(fmri, stim, decoder, n_splits=8):
         predictions - 2d numpy array of predicted stimulus representation
     '''
     # preallocate outputs
-    decoders = []
-    predictions = []
+    #decoders = []
+    #predictions = []
     # create cross-validation object
     kfold = KFold(n_splits=n_splits)
-    #predictions=cross_val_predict(decoder, fmri, stim, cv=kfold, n_jobs=n_splits)
-     
-    for train, test in kfold.split(fmri, stim):
+    predictions=cross_val_predict(decoder, fmri, stim, cv=kfold, n_jobs=n_splits)
+    
+    
+    #for train, test in kfold.split(fmri, stim):
         # copy decoder object
-        dec = copy.deepcopy(decoder)
-        decoders.append(dec)
+    #    dec = copy.deepcopy(decoder)
+    #    decoders.append(dec)
         # fit a copy of decoder object on train split
-        decoders[-1].fit(fmri[train,:], stim[train,:])
+    #    decoders[-1].fit(fmri[train,:], stim[train,:])
         # predict stimulus from trained object
-        predictions.append(decoders[-1].predict(fmri[test,:]))
+    #    predictions.append(decoders[-1].predict(fmri[test,:]))
         # concatenate predictions
-    predictions = np.concatenate(predictions, axis=0)
+    #predictions = np.concatenate(predictions, axis=0)
     return predictions
-
 @timer
 def run_decoding(inp_data_dir, out_dir, stim_param_dir, model_config, decoder):
 

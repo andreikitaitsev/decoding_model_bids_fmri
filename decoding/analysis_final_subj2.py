@@ -10,7 +10,7 @@ from sklearn.decomposition import FastICA
 ### define parameters for decoding model
 inp_dir = '/data/akitaitsev/data1/lagged/'
 stim_param_dir = '/data/akitaitsev/data1/raw_data/processed_stimuli/'
-model_config = {'subjects': ['01']}
+model_config = {'subjects': ['02']}
 out_dir = '/data/akitaitsev/data1/decoding_data5/'
 
 

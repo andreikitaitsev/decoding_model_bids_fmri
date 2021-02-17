@@ -1,5 +1,6 @@
+
 #! /usr/bin/env pyhon3
-# Script to run pilot decoding model
+# Script to run decoding model
 
 import numpy as np 
 import sys
@@ -12,9 +13,47 @@ from sklearn.model_selection import KFold
 import sklearn.metrics 
 import json
 import matplotlib.pyplot as plt
+from sklearn.cross_decomposition import CCA
 
 __all__ = ['get_ridge_and_staff','reduce_dimensionality','compute_correlation', 'plot_log_mse','reshape_mps',\
         'plot_mps_and_reconstructed_mps', 'decode_single_run','decoding_model']
+
+def cca(fmri, stim, n_components, n_splits=8, **kwargs):
+    ''' Fucntion to compute predicted stimulus representation using canonical correlation
+        analysis from sklearn.cross_decomposition. 
+    Inputs:
+        fmri         - 2d numpy array of flattened preprocessed fmri of shape (times, voxels)
+                       used as the predictor
+        stim         - 2d numpy array of flattend feature representation used as targets in CCA
+        n_components - float, number of principal components to leave in the new 
+                       data representation (fed to ccf.fit method)
+        n_splits     - int, number of splits (folds) to use in K-fold cross-vaidation
+    Outputs: 
+        predicted_stim   - 2d numpy array of stimulus representation predicted by the model
+        cca              - the cca model object
+        transformed_fmri - 2d numpy array of shape (times, components) - fmri transformed into 
+                           new feature space (that maximizes the correlation between n_components 
+                           canonical variables)
+        transfromed_stim - 2d numpy array of shape (times, components) - stimulus representation 
+                           transformed into the new feature space (that maximizes the correlation 
+                           between n_components canonical variables)
+        
+    '''
+    kfold = KFold(n_splits=n_splits)
+    cca = []
+    transformed_fmri = []
+    transformed_stim = []
+    predicted_stim = []
+    for train, test in kfold.split(fmri, stim):
+        cca.append(CCA(n_components=n_components, **kwargs))
+        cca[-1].fit(fmri[train,:], stim[train,:])
+        
+        tr_fmri, tr_stim = cca[-1].transform(fmri[test,:], stim[test,:])
+        transformed_fmri.append(tr_fmri)
+        transformed_stim.append(tr_stim)
+        predicted_stim.append(cca[-1].predict(fmri[test,:]))
+    predicted_stim = np.concatenate(predicted_stim, axis=0)
+    return predicted_stim, cca, transformed_fmri, transformed_stim
 
 def get_ridges_and_staff(X, y, scorers, alphas=[1000],  n_splits=8, voxel_selection=True, **kwargs):
     '''Returns ridge regressions trained in a cross-validation on n_splits of the data, scores on the left-out foldsand predicted data.
@@ -135,8 +174,9 @@ def compute_correlation(real_mps, reconstructed_mps, **kwargs):
         correlations.append(np.corrcoef(real_mps[time,:], reconstructed_mps[time,:])[0,-1])
     return np.reshape(np.array(correlations), (-1,1))
 
-def plot_score_single_mps(score, score_name, mps_time, mps_freqs):
-    ''' Function plots any sklearn score as imshow and returns figure handle
+def plot_score_across_features(score, score_name, mps_time, mps_freqs):
+    ''' Function plots any sklearn score across features (1 value per feature over different MPSs) 
+        as imshow and returns figure handle
     Inputs:
         score - 2d numpy array of reshaped score
         score_name - str, name of the score used
@@ -145,7 +185,7 @@ def plot_score_single_mps(score, score_name, mps_time, mps_freqs):
     Outputs:
         fig - figure handle '''
     fig, ax = plt.subplots()
-    fig.suptitle(score_name + ' over all MPSs')
+    fig.suptitle(score_name + ' across different features')
     im = ax.imshow(score, origin='lower', aspect='auto')
     # transform mps_time and mps_freqs from list of strings to np 1d array to allow indexing
     mps_time = np.array([float(el) for el in mps_time])
@@ -163,6 +203,24 @@ def plot_score_single_mps(score, score_name, mps_time, mps_freqs):
     # colorbar
     cbar = fig.colorbar(im, ax=ax)
     cbar.set_label(score_name)
+    return fig
+
+def plot_score_across_mps(score, score_name, ylim = None):
+    '''Fucntion plots score across different MPSs (1 value per MPS) as curve with plt.plot.
+    Inputs:
+        score - 1d numpy array of score (1 value per MPS)
+        score_name - str, name of the score
+        ylim - list of 2 floats; Default = None
+     Outputs:
+        fig - figure handle
+     '''
+    fig, ax = plt.subplots()
+    fig.suptitle(score_name + 'across different MPSs')
+    ax.plot(score)
+    ax.set_xlabel('MPS index')
+    ax.set_ylabel(score_name + 'per MPS')
+    if ylim != None:
+       ax.set_ylim([ylim[0],ylim[1]])
     return fig
 
 def reshape_mps(mps, mps_shape):
@@ -227,15 +285,16 @@ def plot_mps_and_reconstructed_mps(original_mps, reconstructed_mps, mps_time, mp
         fig.suptitle(fig_title)
     return fig
     
-def decode_single_run(fmri_path, stimulus_path, alphas, scorers, stim_param_path, do_pca_fmri=False, var_explained=None, **kwargs):
+def decode_single_run(fmri_path, stimulus_path, stim_param_path, config):
     ''' Runs decoding of single stimulus and fmi run by regressing stimulus representation on bold data via get_ridges_and_staff 
     function (adapted from encoding.py)
     Inputs:
             fmri_path       - str, path to fmri lagged data, output of make_X_Y function
             stimulus_path   - str, path to stimulus representation file
+            stim_param_path - str, path to stimulus parameter json file
+            decoder         - str, decoder to use ('ridge', 'cca', etc.)
             alphas          - float or list of floats, regularization for ridge, None or list of floats, optional
             scorers         - list of scoring functions to use in get_ridge_plus_scores fucntion
-            stim_param_path - str, path to stimulus parameter json file
             do_pca          - logical, whether to do pca on fmri. Default=False
             var_explained   - float, number of components to leave by variance explained for 
                               reduce_dimensionality function. Default = None 
@@ -263,28 +322,31 @@ def decode_single_run(fmri_path, stimulus_path, alphas, scorers, stim_param_path
     with open(stim_param_path, 'r') as par:
         parameters = json.load(par)
 
-    # PCA
-    if do_pca_fmri: 
-        X,__ = reduce_dimensionality(X, var_explained=var_explained, **kwargs)  
+    # select decoder
+    if config["decoder"] == 'ridges':
+        # PCA
+        if do_pca_fmri and "var_explained" in config: 
+            X,__ = reduce_dimensionality(X, var_explained=config["var_explained"])  
+        # ridges
+        alpha_end = config['alphas'][0]
+        alpha_dense = config['alphas'][1]
+        alphas = np.logspace(0, alpha_end, alpha_dense).tolist()
+        ridges, scores_dict, pred_data, test_inds = get_ridges_and_staff(X, y, config["scorers"], alphas) 
     
-    # ridges
-    ridges, scores_dict, pred_data, test_inds = get_ridges_and_staff(X, y, scorers, alphas, **kwargs)  
+    elif config["decoder"] == 'cca':
+        pred_data, cca_model, transformed_fmri, transformed_stim = cca(X,y, config["n_components"])
+            #**(config["n_splits"] if "n_splits" in config)) 
     
-    # get correlation coefficient for every feature across different MPSs and plot it
+    # compute correlation coefficient for every feature across different MPSs and plot it
     r2 = product_moment_corr(y, pred_data) 
     resh_r2 = lambda x: np.reshape(x, (parameters['mps_shape']))
     r2 = resh_r2(r2)
-    fig_r2 = plot_score_single_mps(r2, 'Correlation coefficient', parameters['mps_time'], parameters['mps_freqs']) 
+    fig_r2 = plot_score_across_features(r2, 'Correlation coefficient', parameters['mps_time'], parameters['mps_freqs']) 
      
-    # compute correlation between reconstructed MPSs  and original MPSs and plot it
-    correlations = compute_correlation(y, pred_data)
+    # compute correlation across different MPSs between reconstructed MPSs  and original MPSs and plot it
+    correlations = compute_correlation(y, pred_data) 
+    fig_cor = plot_score_across_mps(correlations, 'Correlation', [0,1])
     
-    fig_cor, ax = plt.subplots(1)
-    fig_cor.suptitle('Correlation of original MPS with reconstructed MPS') 
-    ax.plot(correlations)
-    ax.set_xlabel('MPS times')
-    ax.set_ylabel('Correlations per MPS')
-    ax.set_ylim([0,1])
     # reshape original and reconstructed MPS
     orig_mps = reshape_mps(y, parameters['mps_shape'])
     reconstr_mps = reshape_mps(pred_data, parameters['mps_shape'])
@@ -309,10 +371,13 @@ def decode_single_run(fmri_path, stimulus_path, alphas, scorers, stim_param_path
     
     figs = [fig_cor, fig_r2, fig_mps_best, fig_mps_worst, fig_mps_medium]  
     mps_inds = {'best_mps':int(best_mps_ind), 'worst_mps':int(worst_mps_ind), 'medium_mps':int(medium_mps_ind)}
-    return ridges, scores_dict, pred_data, correlations, figs, mps_inds 
+    if config["decoder"] == 'ridges':
+        return ridges, scores_dict, pred_data, correlations, figs, mps_inds 
+    elif config["decoder"] == 'cca':
+        transformed_data = [transformed_fmri, transformed_stim]
+        return cca_model, pred_data, correlations, figs, mps_inds, transformed_data 
 
-
-def decoding_model(inp_data_dir, out_dir, stim_param_dir, subjects, runs, scorers, alphas, do_pca_fmri=False, var_explained=None, **kwargs):
+def decoding_model(inp_data_dir, out_dir, stim_param_dir, config):
     ''' Function to run decoding on user-specified runs and subjects.
     Inputs:
            
@@ -335,6 +400,17 @@ def decoding_model(inp_data_dir, out_dir, stim_param_dir, subjects, runs, scorer
     '''
     #### Input check
     # as model takes long time to run (would a be pity to find a glitch after running model for days:) )
+    
+    # unpack subjects and runs
+    if "subjects"in config:
+        subjects = config["subjects"]
+    else:
+        subjects =['01','02','03','04','05','06','09','14','15','16','17','18','19','20']
+    
+    if "runs" in config:
+        runs = config["runs"]
+    else:
+        runs = [[1,2,3,4,5,6,7,8] for el in range(len(subjects))]
     
     if len(subjects) != len(runs):
         raise ValueError("Number of subjects does not match number of runs you have specified!"
@@ -380,7 +456,7 @@ def decoding_model(inp_data_dir, out_dir, stim_param_dir, subjects, runs, scorer
         subj_folder_path = os.path.join(inp_data_dir, subj_folder)
         # Loop through runs of each subject
         for run_num in runs[subj_counter]:
-            # get fmri, stimulus and stim_parameters paths and make sure they exist
+            ## get fmri, stimulus and stim_parameters paths and make sure they exist
             fmri = subj_folder + '_task-aomovie_run-' + str(run_num) + '_bold.tsv.gz'
             stim = 'task-aomovie_run-' + str(run_num) + '_stim.tsv.gz'
             stim_param = 'task-aomovie_run-' + str(run_num) + '_stim_parameters.json'
@@ -388,34 +464,64 @@ def decoding_model(inp_data_dir, out_dir, stim_param_dir, subjects, runs, scorer
             stim_path = os.path.join(subj_folder_path, stim)
             stim_param_path = os.path.join(stim_param_dir, stim_param)
             
-            # run decode_single_run
-            print('running decode_single_run on subject ',str(subjects[subj_counter]),' run ',str(run_num))
-            ridges, scores_dict, pred_data, correlations, figures, mps_inds = decode_single_run(fmri_path,\
-                stim_path, alphas, scorers, stim_param_path, do_pca_fmri, var_explained, **kwargs)
+            ## run decode_single_run for different decoders
             
-            # save data into subject-specific folder in the out_dir
-            print('saving model data for subject ', str(subjects[subj_counter]), ' run ', str(run_num))
-            # name files files
-            ridge_name = 'ridges_run-'+str(run_num) + '.pkl'
-            scores_dict_name = 'scores_dict_run-' + str(run_num) + '.pkl'
-            pred_data_name = 'reconstructed_mps_run-' + str(run_num) + '.pkl'
-            correlations_name = 'correlations_run-'+str(run_num) + '.pkl'
-            mps_inds_name = 'mps_inds_rin-' + str(run_num) + '.json'
+            # ridges
+            print('running decode_single_run on subject ',str(subjects[subj_counter]),' run ',str(run_num))
+            if config["decoder"] == 'ridges':
+                ridges, scores_dict, pred_data, correlations, figures, mps_inds = decode_single_run(fmri_path,\
+                stim_path, stim_param_path, config)
 
-            ridges_filename = os.path.join(out_dir, subj_folder, ridge_name) 
-            scores_dict_filename =  os.path.join(out_dir, subj_folder, scores_dict_name) 
-            pred_data_filename = os.path.join(out_dir, subj_folder, pred_data_name)    
-            correlations_filename =  os.path.join(out_dir, subj_folder, correlations_name) 
-            mps_inds_filename = os.path.join(out_dir, subj_folder, mps_inds_name)
+                # save data into subject-specific folder in the out_dir
+                print('saving model data for subject ', str(subjects[subj_counter]), ' run ', str(run_num))
+                # name files files
+                ridge_name = 'ridges_run-'+str(run_num) + '.pkl'
+                scores_dict_name = 'scores_dict_run-' + str(run_num) + '.pkl'
+                pred_data_name = 'reconstructed_mps_run-' + str(run_num) + '.pkl'
+                correlations_name = 'correlations_run-'+str(run_num) + '.pkl'
+                mps_inds_name = 'mps_inds_run-' + str(run_num) + '.json'
 
-            # save files
-            joblib.dump(ridges, ridges_filename)
-            joblib.dump(scores_dict, scores_dict_filename)
-            joblib.dump(pred_data, pred_data_filename)
-            joblib.dump(correlations, correlations_filename)
-            with open(mps_inds_filename, 'w') as fl:
-                json.dump(mps_inds, fl)
+                ridges_filename = os.path.join(out_dir, subj_folder, ridge_name) 
+                scores_dict_filename =  os.path.join(out_dir, subj_folder, scores_dict_name) 
+                pred_data_filename = os.path.join(out_dir, subj_folder, pred_data_name)    
+                correlations_filename =  os.path.join(out_dir, subj_folder, correlations_name) 
+                mps_inds_filename = os.path.join(out_dir, subj_folder, mps_inds_name)
 
+                # save files
+                joblib.dump(ridges, ridges_filename)
+                joblib.dump(scores_dict, scores_dict_filename)
+                joblib.dump(pred_data, pred_data_filename)
+                joblib.dump(correlations, correlations_filename)
+                with open(mps_inds_filename, 'w') as fl:
+                    json.dump(mps_inds, fl)
+            
+            # CCA
+            elif config["decoder"] =="cca":
+                cca_model, pred_data, correlations, figures, mps_inds, transformed_data = decode_single_run(fmri_path,\
+                stim_path, stim_param_path, config)
+            
+                # save data into subject-specific folder in the out_dir
+                print('saving model data for subject ', str(subjects[subj_counter]), ' run ', str(run_num))
+                # name files files
+                cca_name = 'cca_run-'+str(run_num) + '.pkl'
+                pred_data_name = 'reconstructed_mps_run-' + str(run_num) + '.pkl'
+                correlations_name = 'correlations_run-'+str(run_num) + '.pkl'
+                mps_inds_name = 'mps_inds_run-' + str(run_num) + '.json'
+                transformed_data_name = 'transformed_data_run-'+str(run_num) + '.pkl'
+
+                cca_filename = os.path.join(out_dir, subj_folder, cca_name) 
+                pred_data_filename = os.path.join(out_dir, subj_folder, pred_data_name)    
+                correlations_filename =  os.path.join(out_dir, subj_folder, correlations_name) 
+                mps_inds_filename = os.path.join(out_dir, subj_folder, mps_inds_name)
+                transformed_data_filename = os.path.join(out_dir, subj_folder, transformed_data_name)
+                # save files
+                joblib.dump(cca_model, cca_filename)
+                joblib.dump(pred_data, pred_data_filename)
+                joblib.dump(correlations, correlations_filename)
+                joblib.dump(transformed_data, transformed_data_filename) 
+                with open(mps_inds_filename, 'w') as fl:
+                    json.dump(mps_inds, fl)
+            
             # save figures
             # figures = [fig_cor, fig_mse, fig_mps_best, fig_mps_worst, fig_mps_medium] 
             figure_names = ['correlation_run-' + str(run_num)+'.png', 'R2_run-' + str(run_num)+'.png', 'best_mps_run-' + str(run_num)+'.png',\
@@ -432,50 +538,27 @@ if __name__ == '__main__':
     'Config file shall be .json file containing valid arguments for decoding_model_function. \n' 
     'Note that the default values for decoding parameters if not specified in config file: \n'
     'subjects 01, 02, 03, 04, 05, 06, 09, 10, 14, 15, 16, 17, 18, 19, 20 \n'  
-    'runs 1, 2, 3, 4, 5, 6, 7, 8 \n' 
-    'scorers product_moment_corr \n' 
-    'do_pca False \n'
-    'var_explained None',formatter_class=argparse.RawTextHelpFormatter ) 
+    'runs 1, 2, 3, 4, 5, 6, 7, 8 \n', formatter_class=argparse.RawTextHelpFormatter ) 
     
     parser.add_argument('-inp','--input_data_dir', type=str, help='Path to preprocessed stimuli and fmri')
     parser.add_argument('-out','--output_dir', type=str, help='Path to the output directory where the model \
     data shall be saved. Folder structure can be pre-created or absent')
-    parser.add_argument('-config','--config_file', type=str, help='Path to json config file \
-    containing subject list, run list, alphas, do_pca_frmi, var_explained and key-value arguments for \
-    decoding_model function. IT IS RECOMMENDED TO STORE CONFIG FILE IN THE OUTPUT DIR.') 
+    parser.add_argument('-config','--config_file', type=str, help=\
+    'Path to json config file containing stim_param_dir, subject list, list of lists of run list, \n'
+    'decoder and decoder-specific parameters. \n'
+    'For decoder = ridges: \n'
+    'alphas, do_pca_fmri, var_explained,scorers \n'
+    'For decoder = cca: \n'
+    'n_components \n'    
+    'IT IS RECOMMENDED TO STORE CONFIG FILE IN THE OUTPUT DIR.') 
     args = parser.parse_args()
     
     with open(args.config_file) as conf:
         config = json.load(conf)   
     # set the defaults in arguments are not specified in config
     
-    if 'subjects' in config: 
-        subjects = config['subjects'] 
-    else:   
-        subjects =['01','02','03','04','05','06','09','10','14','15','16','17','18','19','20']
-    
-    if 'runs' in config:
-        runs = config['runs']
-    else:
-        runs = [[1,2,3,4,5,6,7,8] for el in range(len(subjects))]
-    
-    if 'scorers' in config:
-        scorers = config['scorers']
-    else:
-        scorers = ['product_moment_corr']
-    
-    if 'do_pca_fmri' in config:
-        do_pca_fmri = config['do_pca_fmri']
-        var_explained = config['var_explained']
-    else: 
-        do_pca_fmri = False
-        var_explained = None 
     stim_param_dir = config['stim_param_dir']
-    alpha_end = config['alphas'][0]
-    alpha_dense = config['alphas'][1]
-    alphas = np.logspace(0, alpha_end, alpha_dense).tolist()
     
     # RUN DECODING MODEL WITH THE GIVEN ARGUMENTS   
-    decoding_model(args.input_data_dir, args.output_dir, stim_param_dir, subjects, runs, scorers, alphas,\
-        do_pca_fmri, var_explained)
+    decoding_model(args.input_data_dir, args.output_dir, stim_param_dir, config)
 

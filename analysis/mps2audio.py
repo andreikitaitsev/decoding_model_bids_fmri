@@ -17,8 +17,8 @@ def mps2spectr(mps, **kwargs):
     '''
     spectr_cum = []
     for time in range(mps.shape[0]):
-        mps_iter = np.vstack((mps[time],np.flip(mps[time], 0)[1:,:]))
-        spectr_iter = np.abs(np.fft.ifft2(mps_iter,**kwargs))
+        mps_iter = np.vstack((np.flip(mps[time], 0)[1:,:], mps[time]))
+        spectr_iter = np.abs(np.fft.ifftshift(np.fft.ifft2(mps_iter,**kwargs)))
         spectr_iter = spectr_iter[spectr_iter.shape[0]//2 :, spectr_iter.shape[1]//2:] 
         spectr_cum.append(spectr_iter)
     spectr_cum = np.concatenate(spectr_cum, axis = 1)
@@ -35,12 +35,14 @@ def spectr2audio(spectr, hop_length_stft, **kwargs):
     audio = librosa.istft(spectr, hop_length = hop_length_stft, **kwargs)
     return audio
 
-def mps2audio(mps_path, stim_param_path, filename):
+def mps2audio(mps_path, stim_param_path, filename, stim_type):
     '''Converts mps into audio and saves in under filename.
     Inputs:
         mps_path -str
         stim_param_path - str
         filename - str, output audio filename
+        stim_type -str, orign or reconstr - scale by sd and add mean to 
+                   original stimulus
     '''
     try:
         mps = joblib.load(mps_path)
@@ -49,6 +51,9 @@ def mps2audio(mps_path, stim_param_path, filename):
             mps = np.loadtxt(fl)
     with open(stim_param_path, 'r') as fl:
         params = json.load(fl)
+    if stim_type == 'orig':
+        mps = mps*np.broadcast_to(params["mps_sd"], mps.shape)
+        mps = mps + np.broadcast_to(params["mps_mean"], mps.shape)
     if np.ndim(mps) != 3:
         mps = np.reshape(mps, (-1,params["mps_shape"][0],params["mps_shape"][1]))
     spectrogram = mps2spectr(mps)
@@ -68,7 +73,7 @@ if __name__=='__main__':
     wav_names = ['orig_'+str(el)+'.wav' for el in range(1,9)]
     out_dirs = [os.path.join(out_dir, el) for el in wav_names]
     for mps_path, stim_path, fname in zip(orig_mps_files, orig_mps_params_files, out_dirs):
-        mps2audio(mps_path, stim_path, fname)
+        mps2audio(mps_path, stim_path, fname, 'orig')
 
 
 

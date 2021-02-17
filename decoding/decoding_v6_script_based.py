@@ -20,6 +20,16 @@ import joblib
 
 ### Helper functions
 
+# decorator
+def timer(func):
+    import time
+    def wrapper(*args, **kwargs):
+        tic = time.time()
+        func(*args, **kwargs)
+        toc = time.time() - tic
+        print('Elapsed time '+str(toc/60)+' minutes.')
+    return wrapper
+
 def reduce_dimensionality(X, var_explained, examine_variance=False, **kwargs):
     ''' Function applys pca with user specified variance explained to the input data
     Inputs:
@@ -344,6 +354,7 @@ def lag(X, lag_par):
     Outputs:
         X_lagged - 2d numpy array
     '''
+    import ipdb; ipdb.set_trace()
     X_lagged = []
     for i in range(0, lag_par+1):
         X_lagged.append( np.vstack((X[i:,:], np.zeros((i, X.shape[1]))))) 
@@ -352,11 +363,11 @@ def lag(X, lag_par):
 ### Custom decoder classes
 
 class myRidge():
-    def __init__(self, alphas = None, voxel_selection=True, var_explained=None, n_splits = 8, n_splits_gridsearch = 5, **kwargs):
+    def __init__(self, alphas = (0,5,5), voxel_selection=True, var_explained=None, n_splits = 8, n_splits_gridsearch = 5, **kwargs):
         '''
         kwargs - additional arguments transferred to ridge_gridsearch_per_target
         alphas - list of 3 int (start, stop, num parameters in numpy logspace function),
-                 optional. Default = 1000
+                 optional. Default: (0,5,5)
                  Regularization parameters to be used for Ridge regression
         voxel_selection - bool, optional, default True
                           Whether to only use voxels with variance larger than zero.
@@ -364,7 +375,10 @@ class myRidge():
                         Default = None (no pca)
         n_splits - int, number of splits in cross validation in fit_transform method
         n_splits_gridsearch - int, number of cross-validation splits in ridge_gridsearch_per_target. '''
-        self.alphas = alphas
+        if isinstance(alphas, tuple) and len(alphas)==3:
+            self.alphas = np.logspace(*list(map(int, alphas)))
+        else:
+            self.alphas = alphas
         self.voxel_selection = voxel_selection
         self.n_splits_gridsearch = n_splits_gridsearch
         self.n_splits = n_splits
@@ -380,10 +394,6 @@ class myRidge():
         if self.voxel_selection:
             voxel_var = np.var(fmri, axis=0)
             fmri = fmri[:,voxel_var > 0.]
-        if self.alphas is None or len(self.alphas) ==1:
-            self.alphas = [1000]
-        else:
-            self.alphas = np.logspace(self.alphas[0], self.alphas[1], self.alphas[2])
         if self.var_explained != None:
             # return pca object and keep it
             fmri, pca, _ = reduce_dimensionality(fmri, self.var_explained)
@@ -398,6 +408,14 @@ class myRidge():
         else:
             return self.ridge_model.predict(fmri)
     
+    def transform(self, fmri):
+        '''To use this call with skelarn Pipeline the class shall have transform 
+        method. In this setup it is the same as predict.'''
+        if self.var_explained is not None:
+            return self.ridge_model.predict(self.pca.transform(fmri))
+        else:
+            return self.ridge_model.predict(fmri)
+
     def fit_transform(self, fmri, stim):
         '''Method is written specifically for sklearn Pipeline.
         It uses n_fold cross-validation to predict out of 
@@ -413,6 +431,8 @@ class myRidge():
 
 
 class temporal_decoder:
+    '''Class converts any object with .fit and .predict methods into
+    final (temporal) decoder for spatial temporal model.''' 
     def __init__(self, decoder, decoder_config, lag_par):
         super().__init__() 
         self.lag_par = lag_par
@@ -420,7 +440,17 @@ class temporal_decoder:
     def fit(self, x, y):
         self.decoder.fit(lag(x, self.lag_par), y)
     def predict(self, x):
-        return self.decoder.predict(lag(x,self.lag_par))
+        '''In sklearn pipeline the predict method of the last estimator is
+        called on sequence of outputs of .transform (or .fit_transform) methods of
+        previous estimators. Some (supervised) estimators return X_tr as output
+        of .transform (e.g. PCA), some X_tr, Y_tr (e.g. CCA). Therefore we take 
+        only first (X) element of the input (X_tr, Y_tr) to .predict method 
+        of temporal decoder if the input to .predict is a tuple or list.'''
+        if (isinstance(x, tuple) or isinstance(x, list)) and len(x) == 2:
+            x_ = x[0]
+        else:
+            x_ = x
+        return self.decoder.predict(lag(x_, self.lag_par))
 
 
 
@@ -456,7 +486,6 @@ def decode(fmri, stim, decoder, n_splits=8):
     #    # concatenate predictions
     #predictions = np.concatenate(predictions, axis=0)
     return predictions
-
 
 def run_decoding(inp_data_dir, out_dir, stim_param_dir, model_config, decoder):
 
