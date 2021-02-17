@@ -62,6 +62,7 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
     Outputs:
         
     mod_pow_spectrs - modulation power spectra - feature representation (time x features) - numpy 2d array
+    compl_mod_pow_spectrs - 2d numpy array of complex values of MPSs
     params          - python dictionary of fucntion parameters(in the subdict metadata), \
                       feature_names and repetition time in seconds
     metadata        - dictionary, data required according to the bids standard \
@@ -119,6 +120,7 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
     mps_accum = []
     mps_iter = []
     mod_pow_spectrs = []
+    complex_mod_pow_spectrs = [] # store complex components of fft2 for sound reconstruction
     
     # Step sizes of MPS
     step_size_mps_time = hop_length_mps * step_size_spec_time
@@ -133,24 +135,39 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
         mps_iter = np.abs(np.fft.fftshift( (np.fft.fft2(spectrogram[:,idx_ar.astype(int)], \
                                       **{argnt: kwargs["argnt"] for argnt in ['s','axes','norm'] if argnt in kwargs})) ) )
         
+        # get complex valued MPS
+        complex_mps_iter = np.fft.fftshift( (np.fft.fft2(spectrogram[:,idx_ar.astype(int)], \
+                                      **{argnt: kwargs["argnt"] for argnt in ['s','axes','norm'] if argnt in kwargs})) )
+
         # get axes units for MPS
         mps_time = np.fft.fftshift( np.fft.fftfreq(mps_iter.shape[1], d = step_size_spec_time) ) # modulation/ s
         mps_freqs = np.fft.fftshift( np.fft.fftfreq(mps_iter.shape[0], d =  1/step_size_spec_freq) )# modulation/ Hz
 
+        # get axes units for complex valued signal
+        complex_mps_time = mps_time.copy()
+        complex_mps_freqs = mps_freqs.copy()
+        
         # reject mirrored frequencies on Y axis (modulations/Hz) 
         mps_iter = mps_iter[Nyquist_mps_freq:, :]  
         mps_freqs = mps_freqs[Nyquist_mps_freq:]
 
-        # cut the MPS according to the input parameters
+        # cut real-valued MPS according to the input parameters
         mps_iter = mps_iter[np.where(mps_freqs <= cutoff_spectr_mod)[0],:]
         mps_iter = mps_iter[:, np.where(np.abs(mps_time) <= cutoff_temp_mod)[0] ]        
+       
+        # cut complex-valued MPS according to the input parameters
+        complex_mps_iter = complex_mps_iter[np.where(np.abs(complex_mps_freqs) <= cutoff_spectr_mod)[0],:]
+        complex_mps_iter = complex_mps_iter[:, np.where(np.abs(complex_mps_time) <= cutoff_temp_mod)[0] ]        
         
         # update mps_accum later used for plotting
         mps_accum.append(mps_iter)
         
-        # flatten 
+        # flatten real-valued MPS 
         mps_iter= np.reshape(mps_iter,(1,mps_iter.shape[0]*mps_iter.shape[1]))
+        
+        # append to cumulative list
         mod_pow_spectrs.append(mps_iter)
+        complex_mod_pow_spectrs.append(np.imag(complex_mps_iter))
     mod_pow_spectrs = np.concatenate(mod_pow_spectrs, axis=0)
     
     # standardize flattened MPSs across times (subtract mean and sd across times)
@@ -239,9 +256,9 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
                     'mps_mean': mps_mean.tolist(), 'mps_sd': mps_sd.tolist()}
     metadata = {'mps_repetition_time': mps_repetition_time, "feature_names": feature_names}  
     if return_figures:
-        return mod_pow_spectrs, parameters, metadata, fig1, fig2
+        return mod_pow_spectrs, complex_mod_pow_spectrs, parameters, metadata, fig1, fig2
     elif not return_figures: 
-        return mod_pow_spectrs, parameters, metadata 
+        return mod_pow_spectrs, complex_mod_pow_spectrs, parameters, metadata 
 
  
 
@@ -316,11 +333,12 @@ if __name__ == '__main__':
             markdown = {'0':'1','1':'2','2':'3','3':'4','4':'5','5':'6','6':'7','7':'8'} #keys - stimuli numbers, values - frmi numebrs
             for wav_file in args.file:
                 if ("return_figures" in config and config["return_figures"]):
-                    mps, params, metadat, fig1, fig2 = mps_stft(wav_file, **config)	
+                    mps, compl_mps, params, metadat, fig1, fig2 = mps_stft(wav_file, **config)	
                 else:
-                    mps, params, metadat = mps_stft(wav_file, **config)
+                    mps, compl_mps, params, metadat = mps_stft(wav_file, **config)
                 filenum = markdown[ os.path.basename(wav_file).split('.')[0] ] 
                 tsv_file ='task-aomovie_run-'+filenum+ '_stim' + '.tsv.gz'
+                compl_mps_filename = 'compl_mps_run-'+filenum+'.pkl'
                 json_stim_metadat ='task-aomovie_run-'+filenum+ '_stim_description'+'.json' 
                 json_stim_params = 'task-aomovie_run-'+filenum+ '_stim_parameters'+'.json' 
                 if ("return_figures" in config and config["return_figures"]):
@@ -338,6 +356,7 @@ if __name__ == '__main__':
                         json.dump(metadat, met)
                     with open(json_stim_params, 'w+') as par:
                         json.dump(params, par)
+                    joblib.dump(compl_mps, os.path.join(args.output, compl_mps_filename))
                     if ("return_figures" in config and config["return_figures"]):
                         fig1.savefig(fig1_fl)
                         fig2.savefig(fig2_fl)
