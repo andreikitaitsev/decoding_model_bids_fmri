@@ -107,7 +107,7 @@ if __name__=='__main__':
     'representation into spectrogram and plot it.')
     parser.add_argument('-orig','--orig_feature_dir',help='Directory with original feature representation.',\
         type=str)
-    parser.add_argument('-recnostr','--reconstr_feature_path',type=str, help='PAth to file of reconstructed \n'
+    parser.add_argument('-reconstr','--reconstr_feature_path',type=str, help='PAth to file of reconstructed \n'
     'feature representation')
     parser.add_argument('-output','--output_dir',type=str, help='Directory where to save spectrogram pictures')
     args=parser.parse_args()
@@ -133,16 +133,15 @@ if __name__=='__main__':
             phase = np.loadtxt(ph)
         phases.append(phase)
     phases=np.concatenate(phases, axis=0)
-    params_path = '/data/akitaitsev/data1/decoding_data5/audio/task-aomovie_run-1_stim_parameters.json'
+    params_path = os.path.join(args.orig_feature_dir,'task-aomovie_run-1_stim_parameters.json')
     reconstr_mps, params, _ = load_data(args.reconstr_feature_path, params_path, None)
     reconstr_spectrogram = mps2spectr_convertor(reconstr_mps, params, phases)
     
     # small 30, 60 and 450 TR segments 
     fig = plot_orig_reconstr_spectr(orig_spectrogram[:, 31:60], reconstr_spectrogram[:, 31:60])
-    fig.savefig(os.path.join(output_dir,'reconstr_and_orig_spectr_SHORT.png',dpi=300))
+    fig.savefig(os.path.join(args.output_dir,'reconstr_and_orig_spectr_SHORT.png'),dpi=300)
     fig = plot_orig_reconstr_spectr(orig_spectrogram[:, 31:120], reconstr_spectrogram[:, 31:120])
-    fig.savefig(os.path.join(output_dir,'reconstr_and_orig_spectr_MID.png',dpi=300))
+    fig.savefig(os.path.join(args.output_dir,'reconstr_and_orig_spectr_MID.png'),dpi=300)
     fig = plot_orig_reconstr_spectr(orig_spectrogram[:, :450], reconstr_spectrogram[:, :450])
-    fig.savefig('/data/akitaitsev/data1/decoding_data5/reconstr_and_orig_spectr_LONG.png',dpi=300)
-    fig.savefig(os.path.join(output_dir,'reconstr_and_orig_spectr_LONG.png',dpi=300))
+    fig.savefig(os.path.join(args.output_dir,'reconstr_and_orig_spectr_LONG.png'),dpi=300)
 
