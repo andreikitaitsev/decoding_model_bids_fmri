@@ -137,6 +137,10 @@ if __name__=='__main__':
     reconstr_mps, params, _ = load_data(args.reconstr_feature_path, params_path, None)
     reconstr_spectrogram = mps2spectr_convertor(reconstr_mps, params, phases)
     
+    # check if the output dir shall be created
+    if not os.path.isdir(args.output_dir):
+        os.makedirs(args.output_dir)
+    
     # small 30, 60 and 450 TR segments 
     fig = plot_orig_reconstr_spectr(orig_spectrogram[:, 31:60], reconstr_spectrogram[:, 31:60])
     fig.savefig(os.path.join(args.output_dir,'reconstr_and_orig_spectr_SHORT.png'),dpi=300)
@@ -144,4 +148,3 @@ if __name__=='__main__':
     fig.savefig(os.path.join(args.output_dir,'reconstr_and_orig_spectr_MID.png'),dpi=300)
     fig = plot_orig_reconstr_spectr(orig_spectrogram[:, :450], reconstr_spectrogram[:, :450])
     fig.savefig(os.path.join(args.output_dir,'reconstr_and_orig_spectr_LONG.png'),dpi=300)
-
