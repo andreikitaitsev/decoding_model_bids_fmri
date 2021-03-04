@@ -114,7 +114,7 @@ if __name__=='__main__':
     
     # convert original feature representation into spectrogram
     orig_spectrogram = []
-    orig_main_dir = '/data/akitaitsev/data1/decoding_data5/audio/'
+    orig_main_dir = '/data/akitaitsev/data1/raw_data/processed_stimuli/2'
     for runnum in range(1,9):
         mps_path = os.path.join(args.orig_feature_dir, ('task-aomovie_run-'+str(runnum)+'_stim.tsv.gz'))
         stim_param_path=os.path.join(args.orig_feature_dir,('task-aomovie_run-'+str(runnum)+'_stim_parameters.json'))
@@ -140,7 +140,6 @@ if __name__=='__main__':
     # check if the output dir shall be created
     if not os.path.isdir(args.output_dir):
         os.makedirs(args.output_dir)
-    
     # small 30, 60 and 450 TR segments 
     fig = plot_orig_reconstr_spectr(orig_spectrogram[:, 31:60], reconstr_spectrogram[:, 31:60])
     fig.savefig(os.path.join(args.output_dir,'reconstr_and_orig_spectr_SHORT.png'),dpi=300)

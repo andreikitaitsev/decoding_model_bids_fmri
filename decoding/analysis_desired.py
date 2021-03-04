@@ -1,29 +1,29 @@
 #! /usr/bin/env python3
-'''Script to run the analysis using decoding_model_v7.py'''
+'''Script to run the analysis using decoding.py'''
 import os
 from sklearn.pipeline import Pipeline
-import decoding_v7 as dec
+import decoding as dec
 from sklearn.decomposition import PCA
 from sklearn.cross_decomposition import CCA
 from sklearn.decomposition import FastICA
 
 ### define parameters for decoding model
-inp_dir = '/data/akitaitsev/data1/lagged/'
-stim_param_dir = '/data/akitaitsev/data1/raw_data/processed_stimuli/'
+inp_dir = '/data/akitaitsev/decoding_model_bids_fmri/lagged/'
+stim_param_dir = '/data/akitaitsev/decoding_model_bids_fmri/raw_data/processed_stimuli/'
 model_configs = [{'subjects': ['01']}, {'subjects': ['02']}, {'subjects': ['03']}, {'subjects': ['04']}]
-out_dir = '/data/akitaitsev/data1/decoding_data5/'
+out_dir = '/data/akitaitsev/decoding_model_bids_fmri/decoding_data/'
 
 ### spatial models
 print('Running spatial models...')
-preprocessors = [PCA(n_components=300), FastICA(n_components=300)]
-spatial_decoders = [dec.myRidge, CCA, CCA]
+preprocessors = [PCA(n_components=100), FastICA(n_components=100)]
+spatial_decoders = [dec.myRidge, CCA]
 ridge_config = {"alphas": [0,5,10], "normalize":True}
 cca30_config = {'n_components':30}
 spatial_decoders_configs = [ridge_config, cca30_config]
 spatial_models = dec.invoke_decoders(spatial_decoders, spatial_decoders_configs)
 
 # create output directories for different spatial models
-out_dir_spatial = ['pca300_ridge','ica300_ridge', 'pca300_cca30','ica300_cca30']
+out_dir_spatial = ['pca100_ridge', 'pca100_cca30', 'ica100_ridge','ica100_cca30']
 
 # run decoding models
 for subject in range(len(model_configs)):
@@ -43,16 +43,16 @@ print('Running spatial temporal models')
 # create spatial-temporal decoders
 lag_par = 3 # determined by GridSearch
 spatial_decoders = [PCA, FastICA, dec.myRidge, CCA]
-spatial_decoders_configs = [ {'n_components':300}, {'n_components':300}, {'alphas':[0,5,5],\
+spatial_decoders_configs = [ {'n_components':100}, {'n_components':100}, {'alphas':[0,5,10],\
     'var_explained':0.9}, {'n_components':30}]
 spatial_decoders = dec.invoke_decoders(spatial_decoders, spatial_decoders_configs)
 
 temporal_decoders = [dec.myRidge, CCA]
 temporal_decoders_configs = [ {'alphas':[0,5,10]},  {'n_components':30}]
-folder_names = ['pca300_ridge', 'pca300_cca30', \
-    'ica300_ridge', 'ica300_cca30',
-    'ridge0.9_ridge','ridge0.9_cca30',\
-    'cca30_ridge', 'cca30_cca30']
+folder_names = ['pca100_ridge', 'pca100_cca30', \
+    'ica100_ridge','ica100_cca30',\
+    'ridge0.9_ridge', 'ridge0.9_cca30',\
+    'cca30_ridge','cca30_cca30']
 
 for subject in range(len(model_configs)):
     folder_cntr = 0 # folder counter
