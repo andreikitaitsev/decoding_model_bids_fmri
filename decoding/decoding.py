@@ -14,11 +14,14 @@ from sklearn.cross_decomposition import CCA
 from sklearn.model_selection import KFold
 from sklearn.base import BaseEstimator
 import sys
-sys.path.append('/data/akitaitsev/data1/code/decoding/')
 import os
 import json
 import joblib
 
+__all__ = ['reduce_dimensionality', 'compute_correlation','plot_score_across_features',\
+    'plot_score_across_mps', 'reshape_mps', 'plot_mps_and_reconstructed_mps', 'assess_predictions',\
+    'denormalize','params_are_equal', 'stack_runs', 'invoke_decoders', 'lag','myRidge',\
+    'temporal_decoder', 'decode', 'run_decoding']
 ### Helper functions
 
 # decorator
@@ -377,10 +380,10 @@ class myRidge(BaseEstimator):
         n_splits_gridsearch - int, number of cross-validation splits in ridge_gridsearch_per_target.
         normalize -bool, whether to do enable normalization in ridge regression. Default = True.
         '''
-        if isinstance(alphas, tuple) and len(alphas)==3:
+        if isinstance(alphas, tuple) or isinstance(alphas, list) and len(alphas)==3:
             self.alphas = np.logspace(*list(map(int, alphas)))
         else:
-            self.alphas = alphas
+            self.alphas = list(map(float,alphas))
         self.voxel_selection = voxel_selection
         self.n_splits_gridsearch = n_splits_gridsearch
         self.n_splits = n_splits
@@ -555,7 +558,7 @@ def run_decoding(inp_data_dir, out_dir, stim_param_dir, model_config, decoder):
         # Check if subject folders in output dir shall be created
         if not os.path.isdir(os.path.join(out_dir, subj_folder)):
             print('Creating folder '+subj_folder+' in the directory '+out_dir)
-            os.mkdir(os.path.join(out_dir, subj_folder))
+            os.makedirs(os.path.join(out_dir, subj_folder))
         elif len(os.listdir(os.path.join(out_dir, subj_folder))) != 0:
             proceed = input('Directory ' + os.path.join(out_dir, subj_folder) + ' is not empty!\n Proceed? y/n \n')
             if proceed == 'n':

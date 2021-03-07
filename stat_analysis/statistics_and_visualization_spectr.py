@@ -18,7 +18,7 @@ data=[]
 # order of looping matters!
 for model in range(len(models)):
     for subject in range(len(subjects)):
-        dat=joblib.load(os.path.join('/data/akitaitsev/data1_backup/decoding_data5/', model_types[model],\
+        dat=joblib.load(os.path.join('/data/akitaitsev/decoding_model_bids/decoding_data/', model_types[model],\
             models[model], subjects[subject], ('correlations_spectr_'+str(subjects[subject])+'.pkl')))
         
         # check if there are 0 correlations
@@ -43,6 +43,7 @@ model_types_=[np.tile(el,pnts4subj*len(subjects)) for el in model_types]
 model_types_=np.concatenate(model_types_)
 data= {'model':models_, 'model_type':model_types_, 'subject':subjects_,'data':data}
 df = pd.DataFrame.from_dict(data)
+df.to_csv('/data/akitaitsev/decoding_model_bids/decoding_data/statistics/df_long_cor_spectr.csv')
 
 # violin plot
 fig, ax = plt.subplots(figsize=(16,9))

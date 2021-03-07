@@ -89,7 +89,9 @@ def plot_orig_reconstr_spectr(orig_spectr, reconstr_spectr):
     '''PLots original and reconstructed spectrogram.'''
     fig, (ax1, ax2) = plt.subplots(1,2, figsize=(16,9))
     im1 = ax1.imshow(orig_spectr, origin='lower', aspect = 'auto')
+    ax1.title.set_text('Original spectrogram')
     im2 = ax2.imshow(reconstr_spectr, origin='lower', aspect = 'auto')
+    ax2.title.set_text('Reconstructed spectrogram')
     
     limits = [np.percentile(orig_spectr, 5), np.percentile(reconstr_spectr,95)]
     cbar1 = fig.colorbar(im1, ax=ax1)
@@ -141,9 +143,10 @@ if __name__=='__main__':
     if not os.path.isdir(args.output_dir):
         os.makedirs(args.output_dir)
     # small 30, 60 and 450 TR segments 
-    fig = plot_orig_reconstr_spectr(orig_spectrogram[:, 31:60], reconstr_spectrogram[:, 31:60])
-    fig.savefig(os.path.join(args.output_dir,'reconstr_and_orig_spectr_SHORT.png'),dpi=300)
-    fig = plot_orig_reconstr_spectr(orig_spectrogram[:, 31:120], reconstr_spectrogram[:, 31:120])
-    fig.savefig(os.path.join(args.output_dir,'reconstr_and_orig_spectr_MID.png'),dpi=300)
-    fig = plot_orig_reconstr_spectr(orig_spectrogram[:, :450], reconstr_spectrogram[:, :450])
-    fig.savefig(os.path.join(args.output_dir,'reconstr_and_orig_spectr_LONG.png'),dpi=300)
+    fig1 = plot_orig_reconstr_spectr(orig_spectrogram[:, 31:60], reconstr_spectrogram[:, 31:60])
+    fig1.savefig(os.path.join(args.output_dir,'reconstr_and_orig_spectr_SHORT.png'),dpi=300)
+    fig2 = plot_orig_reconstr_spectr(orig_spectrogram[:, 31:120], reconstr_spectrogram[:, 31:120])
+    fig2.savefig(os.path.join(args.output_dir,'reconstr_and_orig_spectr_MID.png'),dpi=300)
+    fig3 = plot_orig_reconstr_spectr(orig_spectrogram[:, :450], reconstr_spectrogram[:, :450])
+    fig3.savefig(os.path.join(args.output_dir,'reconstr_and_orig_spectr_LONG.png'),dpi=300)
+    plt.show(block=True)

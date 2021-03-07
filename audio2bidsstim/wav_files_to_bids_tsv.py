@@ -35,7 +35,7 @@ def standardize_mps(mps, return_mean_and_sd=False):
 
 def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mps, use_power = True, log=True,\
              dB=False, plot_spectr=False, plot_mps=False, return_figures=False, cutoff_temp_mod = 50, cutoff_spectr_mod = 50, dec = 2, **kwargs):
-    ''' Function to create modulation powermspectra from wav file via 2d FFT of STFT spectrogram.
+    ''' Function to create modulation power spectra from wav file via 2d FFT of STFT spectrogram.
     Function also saves its configuration to the output directory as json file
     
     Inputs:
@@ -55,7 +55,7 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
     return_figures -       flag, whether to return figure handlers (if there are any) 
     cutoff_temp_mod -   cutoff of modulationd/s (Hz). (default = 50)
     cutoff_spectr_mod - cutoff of modulation/Hz. (default = 50)
-    kwargs -            key-value arguements to librosa stft function when creating spectrogram or \
+    kwargs -            key-value arguements to librosa stft function when creating spectrogram or 
                         numpy fft2 fucntion when creating MPS
     Note1: log and dB cannot be True at the same time!
     
@@ -63,9 +63,9 @@ def mps_stft(filepath, sr, n_fft_stft, hop_length_stft, n_fft_mps, hop_length_mp
         
     mod_pow_spectrs - 2d np arrays of shape (time x features)
     mps_phases      - list of 2d np arrays, phases of mps (to reconstruct audio with ifft2)
-    params          - python dictionary of fucntion parameters(in the subdict metadata), \
+    params          - python dictionary of fucntion parameters(in the subdict metadata), 
                       feature_names and repetition time in seconds
-    metadata        - dictionary, data required according to the bids standard \
+    metadata        - dictionary, data required according to the bids standard 
                       (repetition time and feature names)
     
     Note, that feature_names - list of strings - all modulatation/s for each modulation/Hz 

@@ -8,7 +8,6 @@ import glob
 import json
 import nibabel as nib
 import sys
-sys.path.append('/data/akitaitsev/data1/code/decoding/')
 from preprocessing import preprocess_bold_fmri, make_X_Y
 from nilearn.masking import compute_epi_mask
 
@@ -20,10 +19,10 @@ def run_preprocessing(input_dir, output_dir):
     Note, that if the output folder does not exist or does not have subfolder 
     structure (sub-01, etc.) it will be created.
     Inputs:
-        input_dir -  path to directory, where the stimuli representation files and
+        input_dir -  path to the BIDS directory with stimuli representation files and
                      bold files are stored
-        output_dir - path to directory to store preprocessed stimuli representation 
-                     and bold data
+        output_dir - path to the directory to store preprocessed stimuli representation 
+                     and bold data later used for decoding.
     '''
     # get BOLD TR
     bold_param_filename = os.path.join(input_dir,'task-aomovie_bold.json') 
@@ -84,8 +83,8 @@ def run_preprocessing(input_dir, output_dir):
 if __name__=='__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Run preprocessing and lagging on all files in the input directory')
-    parser.add_argument('-inp','--input_dir',type=str,help='input directory with bids data structure containing aligned frmi and feature representation')
-    parser.add_argument('-out','--output_dir',type=str, help='output directory for preprocessed frmi andlagged (possibly) stimuli')
+    parser.add_argument('-inp','--input_dir',type=str,help='path to BIDS directory containing aligned frmi and stimulus representation')
+    parser.add_argument('-out','--output_dir',type=str, help='output directory for preprocessed frmi and stimulus representation.')
     args = parser.parse_args()
     run_preprocessing(args.input_dir, args.output_dir)
 

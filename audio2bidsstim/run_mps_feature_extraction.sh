@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# change these parameters to your own configuration
+# change these parameters to your own folder configuration
 
-workdir="/data/akitaitsev/data1/" # path to the root directory of the project
+workdir="/data/akitaitsev/decoding_model_bids/" # path to the root directory of the project
 wav_path=$workdir"raw_data/stimuli/" # path to wav files
-scriptpath=$workdir"code/audio2bidsstim/wav_files_to_bids_tsv_mps.py " #path to feature extractor script
-wavfiles="0.wav 1.wav 2.wav 3.wav 4.wav 5.wav 6.wav 7.wav" # list of wav files to use      
-outpath=$workdir"raw_data/processed_stimuli/2" # tmp out path; later these files will be distributed according to bids folder structure 
+scriptpath=$workdir"code/audio2bidsstim/wav_files_to_bids_tsv.py " #path to feature extractor 
+wavfiles="0.wav 1.wav 2.wav 3.wav 4.wav 5.wav 6.wav 7.wav" # list of wav files to extract features from      
+outpath=$workdir"raw_data/processed_stimuli/" # directory to save extracted features at 
 # Read mps config - note in this case it is similar for every subject
 # This config is adapted to have stimulus TR == fmri TR == 2s
 mps_config=$workdir"code/audio2bidsstim/mps_input_config_exp1.json"
@@ -20,7 +20,6 @@ if [ ! -d $workdir ]; then
 fi
 
 cd $workdir
-
 
 # Run wav_files_to_bids_tsv_mps.py with this config for every wav file 
 echo "Extracting features from audio files: "
