@@ -43,19 +43,23 @@ model_types_=[np.tile(el,pnts4subj*len(subjects)) for el in model_types]
 model_types_=np.concatenate(model_types_)
 data= {'model':models_, 'model_type':model_types_, 'subject':subjects_,'data':data}
 df = pd.DataFrame.from_dict(data)
-df.to_csv('/data/akitaitsev/decoding_model_bids/decoding_data/statistics/df_long_cor_spectr.csv')
+df.to_csv('/data/akitaitsev/decoding_model_bids/decoding_data/statistics/df_long_cor_spectr.csv',\
+    index=False)
 
 # violin plot
 fig, ax = plt.subplots(figsize=(16,9))
 sea.violinplot(ax=ax, x='model',y='data', hue='model_type', kind='violin',inner='quartile',hue_order=['SM','STM'],data=df)
 plt.show()
-#fig.savefig('/data/akitaitsev/data1_backup/decoding_data5/violinplots_spectr.png', dpi=300)
+fig.savefig('/data/akitaitsev/decoding_model_bids/decoding_data/violinplots_spectr.png', dpi=300)
 
 ### statistical analyis
 aov=pg.mixed_anova(dv='data', between='model_type',within='model',subject='subject', data=df)
+aov.to_csv('/data/akitaitsev/decoding_model_bids/decoding_data/statistics/anova_rep_measures_spectr.csv')
 print(aov)
 
+pg.print_table(aov)
 model=ols('data~C(model)+C(model_type)+C(subject)', data=df).fit()
 anova=sm.stats.anova_lm(model, typ=2)
+anova.to_csv('/data/akitaitsev/decoding_model_bids/decoding_data/statistics/anova_3way_spect.csv')
 print(anova)
 

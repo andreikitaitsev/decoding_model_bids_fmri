@@ -46,26 +46,31 @@ model_types_=np.concatenate(model_types_)
 data= {'model':models_, 'model_type':model_types_, 'subject':subjects_,'data':data}
 df = pd.DataFrame.from_dict(data)
 # save dataframe
-df.to_csv('/data/akitaitsev/decoding_model_bids/decoding_data/statistics/df_long_cor_mps.csv')
+df.to_csv('/data/akitaitsev/decoding_model_bids/decoding_data/statistics/df_long_cor_mps.csv',\
+    index=False)
 
 # plot violin plots
 fig, ax = plt.subplots(figsize=(16,9))
-sea.violinplot(ax=ax, x='model',y='data', hue='model_type', kind='violin', data=df)
+sea.violinplot(ax=ax, x='model',y='data', hue='model_type', kind='violin',inner='quartile',hue_order=['SM','STM'],data=df)
 plt.show()
-#fig.savefig('/data/akitaitsev/data1/decoding_data5/statistics/violinplot_mps.png', dpi=300)
+fig.savefig('/data/akitaitsev/decoding_model_bids/decoding_data/statistics/violinplot_mps.png', dpi=300)
 
 ### Statistical analyis
+
 # GLM
 #model_mix=sm.mixedlm('data~C(subject)+C(model_type)+ C(model)', data=df, groups="subject").fit()
 #print(model_mix.summary())
 #model=sm.GLM(df.data, df[["model","model_type","subject"]]).fit()
 #print(model_res.summary())
 
-# 2 ways anova on data averaged across runs
+# 2 way anova repeated measures
 aov=pg.mixed_anova(dv='data', between='model_type',within='model',subject='subject', data=df)
-print(aov)
+aov.to_csv('/data/akitaitsev/decoding_model_bids/decoding_data/statistics/anova_rep_measures_mps.csv')
+pg.print_table(aov)
 
+# 3 way anova
 model=ols('data~C(model)+C(model_type)+C(subject)', data=df).fit()
 anova=sm.stats.anova_lm(model, typ=2)
+anova.to_csv('/data/akitaitsev/decoding_model_bids/decoding_data/statistics/anova_3way_mps.csv')
 print(anova)
 

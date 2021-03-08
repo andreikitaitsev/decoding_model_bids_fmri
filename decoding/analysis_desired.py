@@ -8,10 +8,10 @@ from sklearn.cross_decomposition import CCA
 from sklearn.decomposition import FastICA
 
 ### define parameters for decoding model
-inp_dir = '/data/akitaitsev/decoding_model_bids_fmri/processed_data/'
-stim_param_dir = '/data/akitaitsev/decoding_model_bids_fmri/raw_data/processed_stimuli/'
+inp_dir = '/data/akitaitsev/decoding_model_bids/processed_data/'
+stim_param_dir = '/data/akitaitsev/decoding_model_bids/raw_data/processed_stimuli/'
 model_configs = [{'subjects': ['01']}, {'subjects': ['02']}, {'subjects': ['03']}, {'subjects': ['04']}]
-out_dir = '/data/akitaitsev/decoding_model_bids_fmri/decoding_data/'
+out_dir = '/data/akitaitsev/decoding_model_bids/decoding_data/'
 
 ### spatial models
 print('Running spatial models...')
