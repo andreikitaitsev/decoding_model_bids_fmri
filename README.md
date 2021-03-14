@@ -1,5 +1,5 @@
 # Decoding model BIDS fMRI
-**The project is dedicated to developing pipeline to test arbitrary decoding models compatible with any [BIDS](https://bids.neuroimaging.io/) compliabt fMRI dataset.**
+**The project is dedicated to developing pipeline to test arbitrary decoding models compatible with any [BIDS](https://bids.neuroimaging.io/) compliant fMRI dataset.**
 
 The code was created by Andrei Kitaitsev as part of a practical project at the Applied Neurocognitive Psychology Lab/ University of Oldenburg in 2020-2021 under the 
 supervision of Moritz Boos and Dr. Arkan Al-Zubaidi. The project uses [this](https://www.nature.com/articles/sdata20143) open dataset. 
