@@ -1,10 +1,12 @@
 # Decoding model BIDS fMRI
 **The project is dedicated to developing pipeline to test arbitrary decoding models compatible with any [BIDS](https://bids.neuroimaging.io/) compliabt fMRI dataset.**
+
 The code was created by Andrei Kitaitsev as part of a practical project at the Applied Neurocognitive Psychology Lab/ University of Oldenburg in 2020-2021 under the 
-supervision of Moritz Boos and Dr. Arkan Al-Zubaidi.
-The project uses [this](https://www.nature.com/articles/sdata20143) open dataset. 
-See short description of the project below.
+supervision of Moritz Boos and Dr. Arkan Al-Zubaidi. The project uses [this](https://www.nature.com/articles/sdata20143) open dataset. 
+
 See *decoding_model_bids_fmri_example.ipynb* for step by step guidance through project scripts and functions.
+
+See short description of the project below.
 
 Conventional decoding models based on fMRI data exploit signal obtained by regressing BOLD response on presented stimuli convolved with hemodynamic response function (HRF).
 The purpose of this project was to test a new approach to decoding based on regressing Modulation Power Spectrum (MPS) stimulus representation on “raw” BOLD fMRI in 
