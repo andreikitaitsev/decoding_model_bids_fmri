@@ -2,4 +2,6 @@
 *.pyc
 *.txt
 /decoding/sm_ica30_cca30.py
-/audio2bidsstim/__pycache__
+__pycache__/
+.ipynb_checkpoints
+
